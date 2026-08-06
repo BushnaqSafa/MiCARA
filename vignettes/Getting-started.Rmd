@@ -1,0 +1,149 @@
+---
+title: "Getting-started with MiCARA"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting-started with MiCARA}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(MiCARA)
+```
+
+## Pipeline Workflow & Decision Points
+
+MiCARA is designed to be flexible depending on your dataset's completeness and clinical reporting requirements.
+
+### Step 1: Input Validation
+
+`validate_inputs()` ensures sample ID alignment across taxonomic matrices, pathway matrices, and sample metadata. It checks relative vs. absolute abundances, flags high-missingness covariates (>30%), and records retained confounders.
+
+```{r validate-step, eval = TRUE}
+# Load example dataset included in MiCARA
+data("example_taxa", package = "MiCARA")
+data("example_pathways", package = "MiCARA")
+data("example_metadata", package = "MiCARA")
+
+# Validate inputs and filter unusable covariates
+micara_obj <- validate_inputs(
+  taxa     = example_taxa,
+  pathways = example_pathways,
+  metadata = example_metadata,
+  disease_col = "disease"
+)
+```
+
+### Step 2: Handling Missing Metadata (Optional)
+
+Covariate missingness can lead to sample loss during linear model fitting (listwise deletion). MiCARA provides impute_metadata() to address this via MICE:
+**When to use impute_metadata():
+Host covariates (e.g., age_category, BMI) have low-to-moderate missingness (<30%).
+You want to preserve sample size and statistical power.
+
+**When to skip impute_metadata():
+Metadata contains zero missing values (NA).
+Institutional protocols mandate Complete Case Analysis (CCA).
+
+
+Note: If you skip imputation, downstream functions will check for NAs in requested covariates and drop or warn on problematic variables before model fitting.
+
+```{r impute-step, eval = TRUE}
+# Optional: Impute remaining missing metadata values (<30%)
+micara_obj <- impute_metadata(micara_obj)
+```
+
+### Step 3: Differential Abundance Analysis
+
+`run_diff_abundance()` runs bias-corrected log-linear models across taxa, pathways, or both simultaneously using ANCOM-BC2.
+
+```{r diff-step, eval = TRUE}
+# Run differential abundance on both feature types
+diff_results <- run_diff_abundance(
+  micara_obj      = micara_obj,
+  feature_type    = c("taxa", "pathways"),
+  reference_level = "healthy",
+  use_robust      = TRUE
+)
+
+# Inspect significant taxa
+head(diff_results$taxa$significant)
+
+# Inspect significant pathways
+head(diff_results$pathways$significant)
+```
+
+### Step 4: Confounder-Adjusted Interaction Inference
+After identifying robust differentially abundant features, compute_residual_correlations() evaluates taxon–pathway interactions within each disease cohort:
+1. Performs Centered Log-Ratio (CLR) transformations on full feature matrices.
+2. Filters to disease-specific significant taxa and pathways.
+3. Residualizes feature abundances against host covariates (e.g., age_category, BMI, gender, study_name) using QR decomposition.
+4. Computes pairwise Spearman correlations on residuals and applies Benjamini-Hochberg (BH) adjustment within each cohort.
+
+```{r interactions, eval = TRUE}
+# Compute residual correlations per disease
+interactions <- compute_residualCLR_correlations(
+  micara_obj   = micara_obj,
+  diffab_obj   = diff_results,
+  covariates   = c("age_category", "BMI", "gender", "study_name"),
+  q_cutoff     = 0.05,
+  r_cutoff     = 0.20,
+  verbose      = TRUE
+)
+
+# inspect available disease cohorts in the output list
+names(interactions)
+```
+
+```{r inspect-diagnostics}
+
+# View cohort-level analysis summary and covariate usage
+attr(interactions, "summary")
+
+# View analysis settings and CLR transformation diagnostics
+attr(interactions, "settings")
+
+# Find the first analyzed cohort dynamically
+analyzed_cohorts <- names(interactions)[sapply(interactions, function(x) is.list(x) && x$status == "analysed")]
+
+if (length(analyzed_cohorts) > 0) {
+  first_cohort <- analyzed_cohorts[1]
+  message("Displaying links for cohort: ", first_cohort)
+  head(interactions[[first_cohort]]$links)
+}
+```
+### Step 5: Visualize Taxa-Pathway Interactions
+
+Use `plot_interaction_sankey()` to display interactive D3 networks connecting significant taxa to functional pathways:
+
+```{r plot-sankey, eval=FALSE}
+# Interactive visualization
+plot_interaction_sankey(
+  interactions      = interactions,
+  disease           = names(interactions)[1], # Target disease cohort (e.g., "UC")
+  direction         = "both",            # Options: "positive", "negative", or "both"
+  top_n_per_pathway = 5,                 # Top N correlated taxa per pathway
+  font_size         = 12,                # Text label size in pixels
+  node_width        = 35                 # Width of Sankey block nodes
+)
+
+# Optional: Save interactive HTML and static PNG exports
+# Create the results directory first
+dir.create("results", showWarnings = FALSE, recursive = TRUE)
+
+plot_interaction_sankey(
+  interactions      = interactions,
+  disease           = names(interactions)[1],
+  save_path         = "results/sankey_network"
+)
+```
+
+
+

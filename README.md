@@ -1,0 +1,71 @@
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+# MiCARA
+
+MiCARA (Microbiome Confounder-Adjusted Robust Association Analysis)
+provides an end-to-end framework for quality control, metadata
+imputation, differential abundance testing, cross-domain residual
+correlation analysis, and interactive Sankey network visualization.
+
+<!-- badges: start -->
+
+<!-- badges: end -->
+
+## Recommended Workflow
+
+MiCARA follows a streamlined 5-step pipeline:
+
+1.  **`validate_inputs()`** — check data formatting, reconstructs raw
+    counts from relative abundances/proportions if needed and filters
+    out high-missingness covariates (\>30%).
+2.  **`impute_metadata()`** *(Optional)* — Imputes remaining missing
+    metadata values (\<30%). \> **When to skip:** Skip if your metadata
+    is 100% complete or if your study protocol requires Complete Case
+    Analysis (CCA).
+3.  **`run_diff_abundance()`** — Performs ANCOM-BC2 differential
+    abundance on taxa and pathways.
+4.  \*\*`compute_residualCLR_correlations()**` — Infers residual
+    cross-domain correlations while adjusting for disease covariates.
+5.  \*\*`plot_interaction_sankey()**` — Renders interactive Sankey
+    network diagrams for significant interactions.
+
+## Installation
+
+You can install the development version of MiCARA from GitHub with:
+
+``` r
+# Install devtools if not already installed
+if (!requireNamespace("devtools", quietly = TRUE)) {
+    install.packages("devtools")
+}
+
+# Install MiCARA from GitHub
+devtools::install_github("BushnaqSafa/MiCARA")
+```
+
+### Quickstart Example
+
+``` r
+library(MiCARA)
+
+# 1. Validate & filter inputs
+obj <- validate_inputs(
+  taxa_mat = taxa_mat, 
+  pathway_mat = pathway_mat, 
+  metadata = metadata, 
+  disease_col = "disease"
+)
+
+# 2. Impute missing metadata (optional)
+obj <- impute_metadata(obj)
+
+# 3. Perform differential abundance on taxa and pathways
+diff_res <- run_diff_abundance(obj, feature_type = c("taxa", "pathways"))
+
+# 4. Infer layer-2 residual cross-domain correlations
+interactions <- compute_residualCLR_correlations(obj, diffab_obj = diff_res)
+
+# 5. Visualize interactions in a Sankey network
+plot_interaction_sankey(interactions, disease = "UC", direction = "both")
+```
