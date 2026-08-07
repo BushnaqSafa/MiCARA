@@ -56,7 +56,7 @@ impute_metadata <- function(
     imputation_index      = 1,
     verbose               = TRUE
 ) {
-
+  #simple class check
   if (!inherits(micara_obj, "micara_input")) {
     stop(
       "'micara_obj' must be the output of validate_inputs() ",

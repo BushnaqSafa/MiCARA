@@ -51,14 +51,21 @@
     normalise               = TRUE,
     verbose                 = TRUE
   ) {
-    
+
     ## ------------------------------------------------------------------
-    ## 1a. Object types
+    ## 1a. Object types & Auto-Coercion
     ## ------------------------------------------------------------------
     
-    if (!is.data.frame(taxa))     stop("'taxa' must be a data.frame")
-    if (!is.data.frame(pathways)) stop("'pathways' must be a data.frame")
-    if (!is.data.frame(metadata)) stop("'metadata' must be a data.frame")
+    coerce_to_df <- function(x, name) {
+      if (is.matrix(x) || is.data.frame(x) || inherits(x, c("DFrame", "DataFrame", "tbl_df", "tbl", "data.table"))) {
+        return(as.data.frame(x))
+      }
+      stop(sprintf("'%s' must be a matrix, data.frame, tibble, or Bioconductor DFrame (received class: %s)", name, class(x)[1]))
+    }
+    
+    taxa     <- coerce_to_df(taxa, "taxa")
+    pathways <- coerce_to_df(pathways, "pathways")
+    metadata <- coerce_to_df(metadata, "metadata")
     
     ## ------------------------------------------------------------------
     ## 1b. Disease / Group column validation & standardization
@@ -123,6 +130,29 @@
     
     taxa     <- move_first_col_to_rownames(taxa,     "taxa")
     pathways <- move_first_col_to_rownames(pathways, "pathways")
+    
+    ## ------------------------------------------------------------------
+    ## 2b. Auto-cleaning MetaPhlAn taxa & HUMAnN pathways
+    ## ------------------------------------------------------------------
+    
+    # Auto-clean MetaPhlAn taxonomic names if detected
+    if (any(grepl("s__", rownames(taxa)))) {
+      if (verbose) {
+        message("[Info] MetaPhlAn taxonomic prefixes detected. Extracting species and cleaning names...")
+      }
+      keep_taxa <- grepl("s__", rownames(taxa)) & !grepl("t__", rownames(taxa))
+      taxa <- taxa[keep_taxa, , drop = FALSE]
+      rownames(taxa) <- chartr("_", " ", sub(".*s__", "", rownames(taxa)))
+    }
+    
+    # Auto-clean HUMAnN pathway rows if detected
+    if (any(grepl("\\|", rownames(pathways))) || any(grepl("UNINTEGRATED|UNMAPPED", rownames(pathways)))) {
+      if (verbose) {
+        message("[Info] HUMAnN stratified/unmapped pathways detected. Extracting community-level pathways...")
+      }
+      keep_pwy <- !grepl("\\|", rownames(pathways)) & !grepl("UNINTEGRATED|UNMAPPED", rownames(pathways))
+      pathways <- pathways[keep_pwy, , drop = FALSE]
+    }
     
     ## ------------------------------------------------------------------
     ## 3. Sample ID alignment (taxa vs pathways)
@@ -228,32 +258,42 @@
     keep_covariates   <- names(missing_fraction[missing_fraction <= metadata_missing_cutoff])
     remove_covariates <- names(missing_fraction[missing_fraction >  metadata_missing_cutoff])
     
+  
     ## ------------------------------------------------------------------
     ## 7. HELPER: Detect abundance scale
     ## ------------------------------------------------------------------
     
     detect_scale <- function(mat) {
-      totals <- colSums(mat, na.rm = TRUE)
-      median_total <- stats::median(totals, na.rm = TRUE)
-      # Check for log-transformed or normalized data with negative values
       if (any(mat < 0, na.rm = TRUE)) {
         return("transformed/log")
       }
       
-      if (abs(median_total - 100) < 5) {
-        return("percentage")
-      } else if (abs(median_total - 1) < 0.05) {
+      totals       <- colSums(mat, na.rm = TRUE)
+      median_total <- stats::median(totals, na.rm = TRUE)
+      max_val      <- max(mat, na.rm = TRUE)
+      
+      # Proportion: bounded by 1.0 (holds true even after removing unmapped rows)
+      if (max_val <= 1.0 && median_total <= 1.0) {
         return("proportion")
-      } else if (median_total > 1) {
+      } 
+      
+      # Percentage: values <= 100 with sample totals centered near or below 100
+      if (max_val <= 100 && (abs(median_total - 100) < 15 || max_val > 1)) {
+        return("percentage")
+      } 
+      
+      # Raw counts: large integer abundances
+      if (median_total > 1) {
         return("counts")
-      } else {
-        stop("Unable to determine abundance scale. Median sample total = ", round(median_total, 2))
       }
+      
+      stop("Unable to determine abundance scale. Median sample total = ", round(median_total, 2))
     }
     
     # Detect scale for both matrices
     taxa_scale     <- detect_scale(taxa)
     pathways_scale <- detect_scale(pathways)
+    
     
     ## ------------------------------------------------------------------
     ## 8. HELPER: Back-calculate raw counts from relative abundance 

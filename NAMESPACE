@@ -3,6 +3,8 @@
 export(compute_residualCLR_correlations)
 export(impute_metadata)
 export(plot_interaction_sankey)
+export(prep_humann_pathways)
+export(prep_metaphlan_taxa)
 export(run_diff_abundance)
 export(validate_inputs)
 importFrom(ANCOMBC,ancombc2)
