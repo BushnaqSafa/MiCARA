@@ -1,14 +1,17 @@
-#' Validate and Preprocess MiCARA Input Tables
+#' #' Validate and Preprocess MiCARA Input Tables
 #'
 #' Performs quality control on taxonomic and functional pathway abundance
 #' tables and accompanying sample metadata. Checks sample ID alignment,
 #' detects abundance scales (counts vs. relative abundances), back-calculates 
 #' estimated raw integer counts when necessary using sequencing depth, 
 #' filters rare disease groups, and evaluates metadata covariate missingness.
+#' Automatically detects and drops leading serial or index columns 
+#' (e.g., \code{1:N}, \code{X}, \code{Unnamed: 0}) if present.
 #'
 #' @param taxa data.frame of taxon abundances with samples as columns and 
 #'   taxa as rows. Rownames can be set directly or provided in a leading 
-#'   non-numeric column.
+#'   non-numeric column. Leading serial or index columns (e.g., \code{1:N}, \code{X}) 
+#'   are automatically detected and dropped.
 #' @param pathways data.frame of pathway abundances with samples as columns 
 #'   and pathways as rows. Follows the same structure as \code{taxa}.
 #' @param metadata data.frame with one row per sample. Must contain 
@@ -25,7 +28,10 @@
 #'   to the console.
 #' @param disease_col Character string specifying the metadata column containing disease cohort labels.
 #' @param normalise Logical indicating whether feature normalization should be performed. Default is TRUE.
-#'
+#' 
+#' 
+#' 
+#' 
 #' @return An object of class \code{micara_input}: a list containing:
 #'   \item{taxa}{Processed data frame of taxon abundances (reconstructed to 
 #'     estimated raw counts if relative abundances were supplied alongside 

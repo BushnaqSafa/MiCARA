@@ -2,7 +2,7 @@
 % Please edit documentation in R/validate_inputs.R
 \name{validate_inputs}
 \alias{validate_inputs}
-\title{Validate and Preprocess MiCARA Input Tables}
+\title{#' Validate and Preprocess MiCARA Input Tables}
 \usage{
 validate_inputs(
   taxa,
@@ -18,7 +18,8 @@ validate_inputs(
 \arguments{
 \item{taxa}{data.frame of taxon abundances with samples as columns and
 taxa as rows. Rownames can be set directly or provided in a leading
-non-numeric column.}
+non-numeric column. Leading serial or index columns (e.g., \code{1:N}, \code{X})
+are automatically detected and dropped.}
 
 \item{pathways}{data.frame of pathway abundances with samples as columns
 and pathways as rows. Follows the same structure as \code{taxa}.}
@@ -62,4 +63,6 @@ tables and accompanying sample metadata. Checks sample ID alignment,
 detects abundance scales (counts vs. relative abundances), back-calculates
 estimated raw integer counts when necessary using sequencing depth,
 filters rare disease groups, and evaluates metadata covariate missingness.
+Automatically detects and drops leading serial or index columns
+(e.g., \code{1:N}, \code{X}, \code{Unnamed: 0}) if present.
 }
