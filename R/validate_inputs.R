@@ -231,29 +231,42 @@
       pathways <- pathways[keep_pwy, , drop = FALSE]
     }
     
+   
     ## ------------------------------------------------------------------
-    ## 3. Sample ID alignment (taxa vs pathways)
+    ## 3. Sample ID Alignment & Auto-Subset across Taxa, Pathways, and Metadata
     ## ------------------------------------------------------------------
     
-    if (!identical(colnames(taxa), colnames(pathways))) {
-      stop("Sample IDs in 'taxa' and 'pathways' are not identical and in the same order.")
-    }
+    # 1. Determine current sample IDs (columns if features are rows)
+    taxa_samples     <- if (all(colnames(taxa) %in% metadata[[sample_id_col]])) colnames(taxa) else rownames(taxa)
+    pathway_samples  <- if (all(colnames(pathways) %in% metadata[[sample_id_col]])) colnames(pathways) else rownames(pathways)
+    meta_samples     <- as.character(metadata[[sample_id_col]])
     
-    if (!all(colnames(taxa) %in% metadata$sample_id)) {
-      missing_ids <- setdiff(colnames(taxa), metadata$sample_id)
+    # 2. Find common samples across all three datasets
+    common_samples <- intersect(intersect(taxa_samples, pathway_samples), meta_samples)
+    
+    if (length(common_samples) == 0) {
       stop(
-        length(missing_ids), " sample ID(s) present in taxa/pathways ",
-        "but absent from metadata (e.g. ", paste(utils::head(missing_ids, 3), collapse = ", "), ")"
+        "No overlapping sample IDs found across 'taxa', 'pathways', and 'metadata'. ",
+        "Please verify that sample IDs match across all three datasets."
       )
     }
     
-    ## reorder metadata to match taxa/pathways column order
-    metadata <- metadata[match(colnames(taxa), metadata$sample_id), ]
-    
-    ## defensive re-check after reordering
-    if (!identical(colnames(taxa), metadata$sample_id)) {
-      stop("Internal alignment error: metadata$sample_id does not match taxa columns after reordering.")
+    if (length(common_samples) < length(meta_samples)) {
+      message(sprintf("[MiCARA] Subsetting data to %d overlapping samples found across all inputs.", length(common_samples)))
     }
+    
+    # 3. Orient matrices so samples are in ROWS and reorder to match metadata
+    align_matrix <- function(mat, samples) {
+      # Transpose if samples are currently in columns
+      if (all(samples %in% colnames(mat))) {
+        mat <- t(mat)
+      }
+      return(mat[samples, , drop = FALSE])
+    }
+    
+    taxa     <- align_matrix(taxa, common_samples)
+    pathways <- align_matrix(pathways, common_samples)
+    metadata <- metadata[match(common_samples, meta_samples), , drop = FALSE]
     
     ## ------------------------------------------------------------------
     ## 4. Mandatory metadata columns
