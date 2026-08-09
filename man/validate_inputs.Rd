@@ -2,7 +2,7 @@
 % Please edit documentation in R/validate_inputs.R
 \name{validate_inputs}
 \alias{validate_inputs}
-\title{#' Validate and Preprocess MiCARA Input Tables}
+\title{Validate and preprocess MiCARA input tables}
 \usage{
 validate_inputs(
   taxa,
@@ -16,56 +16,31 @@ validate_inputs(
 )
 }
 \arguments{
-\item{taxa}{data.frame of taxon abundances with samples as columns and
-taxa as rows. Rownames can be set directly or provided in a leading
-non-numeric column. Leading serial or index columns (e.g., \code{1:N}, \code{X})
-are automatically detected and dropped.}
+\item{taxa}{Taxonomic abundance table. Features must be rows and samples
+columns. The first column may contain feature names.}
 
-\item{pathways}{data.frame of pathway abundances with samples as columns
-and pathways as rows. Follows the same structure as \code{taxa}.}
+\item{pathways}{Functional pathway abundance table. Features must be rows
+and samples columns. The first column may contain feature names.}
 
-\item{metadata}{data.frame with one row per sample. Must contain
-\code{sample_id} and \code{disease}. Optional recognized columns include
-sequencing depth (\code{number_reads}, \code{sequencing_depth},
-\code{total_reads}, \code{n_reads}, or \code{depth}—used to reconstruct
-raw counts if relative abundance is provided), \code{study_name},
-\code{age}, \code{age_category}, \code{gender}, and \code{BMI}. Character-encoded
-numeric fields are automatically coerced to numeric.}
+\item{metadata}{Sample metadata. Must contain sample IDs and disease labels.}
 
-\item{disease_col}{Character string specifying the metadata column containing disease cohort labels.}
+\item{disease_col}{Name of the disease column in metadata.}
 
-\item{disease_min_samples}{Minimum number of samples required to retain
-a disease group (default 10).}
+\item{disease_min_samples}{Minimum number of samples required to retain a
+disease group. Default is 10.}
 
-\item{metadata_missing_cutoff}{Maximum allowed fraction of missing
-values for an optional covariate to be retained (default 0.30).}
+\item{metadata_missing_cutoff}{Maximum allowed fraction of missing values
+for an optional covariate. Default is 0.30.}
 
-\item{normalise}{Logical indicating whether feature normalization should be performed. Default is TRUE.}
+\item{normalise}{Logical; if TRUE, abundance tables are converted to
+percentage relative abundance. Default TRUE.}
 
-\item{verbose}{Logical; if \code{TRUE} (default), prints a summary report
-to the console.}
+\item{verbose}{Logical; print a QC summary. Default TRUE.}
 }
 \value{
-An object of class \code{micara_input}: a list containing:
-\item{taxa}{Processed data frame of taxon abundances (reconstructed to
-estimated raw counts if relative abundances were supplied alongside
-a sequencing depth column in metadata).}
-\item{pathways}{Processed data frame of pathway abundances.}
-\item{metadata}{Filtered and aligned metadata data frame.}
-\item{abundance_scale}{A list containing \code{detected} (initial scale)
-and \code{final} (resulting scale after processing).}
-\item{confounders}{Character vector of retained covariate names.}
-\item{removed_covariates}{Character vector of covariates excluded due to missingness.}
-\item{removed_diseases}{Character vector of disease groups excluded due to low sample size.}
+An object of class \code{"micara_input"}.
 }
 \description{
 Performs quality control on taxonomic and functional pathway abundance
-tables and accompanying sample metadata. Checks sample ID alignment,
-detects abundance scales (counts vs. relative abundances), back-calculates
-estimated raw integer counts when necessary using sequencing depth,
-filters rare disease groups, and evaluates metadata covariate missingness.
-Automatically detects and drops leading serial or index columns
-(e.g., \code{1:N}, \code{X}, \code{Unnamed: 0}) if present, and automatically coerces
-text-encoded quantitative metadata covariates (e.g., \code{"unknown"} or \code{"NA"} in
-\code{age} or \code{BMI}) into numeric \code{NA} values for downstream imputation.
+tables and accompanying sample metadata.
 }

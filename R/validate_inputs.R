@@ -1,524 +1,648 @@
-#' #' Validate and Preprocess MiCARA Input Tables
+#' Validate and preprocess MiCARA input tables
 #'
 #' Performs quality control on taxonomic and functional pathway abundance
-#' tables and accompanying sample metadata. Checks sample ID alignment,
-#' detects abundance scales (counts vs. relative abundances), back-calculates 
-#' estimated raw integer counts when necessary using sequencing depth, 
-#' filters rare disease groups, and evaluates metadata covariate missingness.
-#' Automatically detects and drops leading serial or index columns 
-#' (e.g., \code{1:N}, \code{X}, \code{Unnamed: 0}) if present, and automatically coerces 
-#' text-encoded quantitative metadata covariates (e.g., \code{"unknown"} or \code{"NA"} in 
-#' \code{age} or \code{BMI}) into numeric \code{NA} values for downstream imputation.
+#' tables and accompanying sample metadata.
 #'
-#' @param taxa data.frame of taxon abundances with samples as columns and 
-#'   taxa as rows. Rownames can be set directly or provided in a leading 
-#'   non-numeric column. Leading serial or index columns (e.g., \code{1:N}, \code{X}) 
-#'   are automatically detected and dropped.
-#' @param pathways data.frame of pathway abundances with samples as columns 
-#'   and pathways as rows. Follows the same structure as \code{taxa}.
-#' @param metadata data.frame with one row per sample. Must contain 
-#'   \code{sample_id} and \code{disease}. Optional recognized columns include 
-#'   sequencing depth (\code{number_reads}, \code{sequencing_depth}, 
-#'   \code{total_reads}, \code{n_reads}, or \code{depth}—used to reconstruct 
-#'   raw counts if relative abundance is provided), \code{study_name}, 
-#'   \code{age}, \code{age_category}, \code{gender}, and \code{BMI}. Character-encoded 
-#'   numeric fields are automatically coerced to numeric.
-#' @param disease_min_samples Minimum number of samples required to retain 
-#'   a disease group (default 10).
-#' @param metadata_missing_cutoff Maximum allowed fraction of missing 
-#'   values for an optional covariate to be retained (default 0.30).
-#' @param verbose Logical; if \code{TRUE} (default), prints a summary report 
-#'   to the console.
-#' @param disease_col Character string specifying the metadata column containing disease cohort labels.
-#' @param normalise Logical indicating whether feature normalization should be performed. Default is TRUE.
-#' 
-#' 
-#' 
-#' 
-#' @return An object of class \code{micara_input}: a list containing:
-#'   \item{taxa}{Processed data frame of taxon abundances (reconstructed to 
-#'     estimated raw counts if relative abundances were supplied alongside 
-#'     a sequencing depth column in metadata).}
-#'   \item{pathways}{Processed data frame of pathway abundances.}
-#'   \item{metadata}{Filtered and aligned metadata data frame.}
-#'   \item{abundance_scale}{A list containing \code{detected} (initial scale) 
-#'     and \code{final} (resulting scale after processing).}
-#'   \item{confounders}{Character vector of retained covariate names.}
-#'   \item{removed_covariates}{Character vector of covariates excluded due to missingness.}
-#'   \item{removed_diseases}{Character vector of disease groups excluded due to low sample size.}
+#' @param taxa Taxonomic abundance table. Features must be rows and samples
+#'   columns. The first column may contain feature names.
+#' @param pathways Functional pathway abundance table. Features must be rows
+#'   and samples columns. The first column may contain feature names.
+#' @param metadata Sample metadata. Must contain sample IDs and disease labels.
+#' @param disease_col Name of the disease column in metadata.
+#' @param disease_min_samples Minimum number of samples required to retain a
+#'   disease group. Default is 10.
+#' @param metadata_missing_cutoff Maximum allowed fraction of missing values
+#'   for an optional covariate. Default is 0.30.
+#' @param normalise Logical; if TRUE, abundance tables are converted to
+#'   percentage relative abundance. Default TRUE.
+#' @param verbose Logical; print a QC summary. Default TRUE.
 #'
-#' @export  
-
-
-  validate_inputs <- function(
+#' @return An object of class \code{"micara_input"}.
+#'
+#' @export
+validate_inputs <- function(
     taxa,
     pathways,
     metadata,
-    disease_col = "disease",
+    disease_col             = "disease",
     disease_min_samples     = 10,
     metadata_missing_cutoff = 0.30,
-    normalise               = TRUE,
-    verbose                 = TRUE
-  ) {
-
-    ## ------------------------------------------------------------------
-    ## 1a. Object types & Auto-Coercion
-    ## ------------------------------------------------------------------
+    normalise                = TRUE,
+    verbose                  = TRUE
+) {
+  
+  ## ================================================================
+  ## 1. Basic input validation
+  ## ================================================================
+  
+  if (!is.data.frame(taxa)) {
+    stop("'taxa' must be a data.frame.", call. = FALSE)
+  }
+  
+  if (!is.data.frame(pathways)) {
+    stop("'pathways' must be a data.frame.", call. = FALSE)
+  }
+  
+  if (!is.data.frame(metadata)) {
+    stop("'metadata' must be a data.frame.", call. = FALSE)
+  }
+  
+  if (!is.character(disease_col) || length(disease_col) != 1L) {
+    stop("'disease_col' must be a single column name.", call. = FALSE)
+  }
+  
+  if (!disease_col %in% names(metadata)) {
+    stop(
+      "Disease column '", disease_col,
+      "' was not found in metadata.",
+      call. = FALSE
+    )
+  }
+  
+  if (!"sample_id" %in% names(metadata)) {
+    stop(
+      "Metadata must contain a column named 'sample_id'.",
+      call. = FALSE
+    )
+  }
+  
+  ## ================================================================
+  ## 2. Convert feature tables to feature x sample matrices
+  ##
+  ## CAMDA format:
+  ##
+  ##   feature_name | sample1 | sample2 | ...
+  ##
+  ## After this step:
+  ##
+  ##   rownames = feature names
+  ##   columns  = sample IDs
+  ## ================================================================
+  
+  prepare_abundance_table <- function(df, label) {
     
-    coerce_to_df <- function(x, name) {
-      if (is.matrix(x) || is.data.frame(x) || inherits(x, c("DFrame", "DataFrame", "tbl_df", "tbl", "data.table"))) {
-        return(as.data.frame(x))
-      }
-      stop(sprintf("'%s' must be a matrix, data.frame, tibble, or Bioconductor DFrame (received class: %s)", name, class(x)[1]))
-    }
-    
-    taxa     <- coerce_to_df(taxa, "taxa")
-    pathways <- coerce_to_df(pathways, "pathways")
-    metadata <- coerce_to_df(metadata, "metadata")
-    
-    ## ------------------------------------------------------------------
-    ## 1b. Helper: Drop serial numbers & handle feature row names
-    ## ------------------------------------------------------------------
-    move_first_col_to_rownames <- function(df, label) {
-      df <- as.data.frame(df, stringsAsFactors = FALSE)
-      if (ncol(df) == 0) return(df)
-      
-      # Step A: Detect and drop serial / index column from Column 1
-      c1     <- df[[1]]
-      cn     <- colnames(df)[1]
-      is_seq <- is.numeric(c1) && (identical(as.integer(c1), seq_len(nrow(df))) || identical(as.integer(c1), 0L:(nrow(df) - 1L)))
-      is_idx <- grepl("^(X|Unnamed|index|serial|row_?num)", cn, ignore.case = TRUE)
-      
-      if (is_seq || is_idx) {
-        message(sprintf("[MiCARA] Automatically dropped serial/index column '%s' from %s.", cn, label))
-        df <- df[, -1, drop = FALSE]
-      }
-      
-      # Step B: Evaluate remaining columns
-      is_numeric_col <- vapply(df, is.numeric, logical(1))
-      
-      # All numeric -> already clean matrix with rownames attached
-      if (all(is_numeric_col)) {
-        return(df)
-      }
-      
-      # Non-numeric 1st column + numeric rest -> move feature names to rownames
-      if (!is_numeric_col[1] && all(is_numeric_col[-1])) {
-        feature_names <- as.character(df[[1]])
-        
-        if (any(duplicated(feature_names))) {
-          stop(
-            "'", label, "' first column contains duplicate names; ",
-            "cannot use as unique row identifiers.",
-            call. = FALSE
-          )
-        }
-        
-        df <- df[, -1, drop = FALSE]
-        rownames(df) <- feature_names
-        return(df)
-      }
-      
+    if (ncol(df) < 2L) {
       stop(
-        "'", label, "' contains non-numeric columns that could not be auto-resolved. ",
-        "Provide either (a) rownames = feature names with all columns numeric, or ",
-        "(b) a single leading non-numeric column of feature names followed by numeric sample columns.",
+        "'", label,
+        "' must contain a feature-name column and at least one sample column.",
         call. = FALSE
       )
     }
     
-    # Clean taxa and pathways
-    taxa     <- move_first_col_to_rownames(taxa,     "taxa")
-    pathways <- move_first_col_to_rownames(pathways, "pathways")
+    ## --------------------------------------------------------------
+    ## First column is treated as the feature-name column when all
+    ## remaining columns are numeric.
+    ## --------------------------------------------------------------
     
-    ## ------------------------------------------------------------------
-    ## 1c. Disease / Group column validation & standardization
-    ## ------------------------------------------------------------------
-    
-    if (!disease_col %in% colnames(metadata)) {
-      stop(sprintf(
-        "Specified `disease_col` ('%s') was not found in metadata columns. Available columns: %s",
-        disease_col,
-        paste(sQuote(colnames(metadata)), collapse = ", ")
-      ))
-    }
-    
-    # Standardize internally so rest of function can always rely on metadata$disease
-    metadata$disease <- metadata[[disease_col]]
-    
-    ## ------------------------------------------------------------------
-    ## 1d. Convert character quantitative covariates to numeric NA fro imputation (ex: age or BMI values : "NA" or "unknown" to numeric NA)
-    ## ------------------------------------------------------------------
-    
-    # Auto-convert known quantitative covariates from character to numeric
-    num_covariates <- intersect(c("age", "BMI", "number_reads", "sequencing_depth", "total_reads", "n_reads", "depth"), colnames(metadata))
-    
-    for (col in num_covariates) {
-      if (!is.numeric(metadata[[col]])) {
-        metadata[[col]] <- suppressWarnings(as.numeric(as.character(metadata[[col]])))
-        message(sprintf("[MiCARA] Auto-converted metadata covariate '%s' to numeric.", col))
-      }
-    }
-    
-    ## ------------------------------------------------------------------
-    ## 2. Flexible feature-name handling + numeric content check
-    ## cleans up imported spreadsheets/data frames so that features (like taxa names or pathway IDs) become row names, leaving only numeric sample measurements in the matrix.
-    ##
-    ## Accepts either:
-    ##   (a) rownames already set to taxon/pathway names, all columns numeric
-    ##   (b) first column holds taxon/pathway names as a data column, with
-    ##       every other column numeric (typical of a TSV read via
-    ##       read.delim without row.names = 1)
-    ## Any other non-numeric column configuration is rejected.
-    ## ------------------------------------------------------------------
-    
-    move_first_col_to_rownames <- function(df, label) {
-      
-      is_numeric_col <- vapply(df, is.numeric, logical(1))
-      
-      if (all(is_numeric_col)) {
-        return(df)
-      }
-      
-      if (!is_numeric_col[1] && all(is_numeric_col[-1])) {
-        
-        feature_names <- as.character(df[[1]])
-        
-        if (any(duplicated(feature_names))) {
-          stop(
-            "'", label, "' first column contains duplicate names; ",
-            "cannot use as unique row identifiers."
-          )
-        }
-        
-        df <- df[, -1, drop = FALSE]
-        rownames(df) <- feature_names
-        
-        return(df)
-      }
-      
-      stop(
-        "'", label, "' contains non-numeric columns that could not be ",
-        "auto-resolved. Provide either (a) rownames = feature names with ",
-        "all columns numeric, or (b) a single leading non-numeric column ",
-        "of feature names followed by numeric sample columns."
-      )
-    }
-    
-    taxa     <- move_first_col_to_rownames(taxa,     "taxa")
-    pathways <- move_first_col_to_rownames(pathways, "pathways")
-    
-    ## ------------------------------------------------------------------
-    ## 2b. Auto-cleaning MetaPhlAn taxa & HUMAnN pathways
-    ## ------------------------------------------------------------------
-    
-    # Auto-clean MetaPhlAn taxonomic names if detected
-    if (any(grepl("s__", rownames(taxa)))) {
-      if (verbose) {
-        message("[Info] MetaPhlAn taxonomic prefixes detected. Extracting species and cleaning names...")
-      }
-      keep_taxa <- grepl("s__", rownames(taxa)) & !grepl("t__", rownames(taxa))
-      taxa <- taxa[keep_taxa, , drop = FALSE]
-      rownames(taxa) <- chartr("_", " ", sub(".*s__", "", rownames(taxa)))
-    }
-    
-    # Auto-clean HUMAnN pathway rows if detected
-    if (any(grepl("\\|", rownames(pathways))) || any(grepl("UNINTEGRATED|UNMAPPED", rownames(pathways)))) {
-      if (verbose) {
-        message("[Info] HUMAnN stratified/unmapped pathways detected. Extracting community-level pathways...")
-      }
-      keep_pwy <- !grepl("\\|", rownames(pathways)) & !grepl("UNINTEGRATED|UNMAPPED", rownames(pathways))
-      pathways <- pathways[keep_pwy, , drop = FALSE]
-    }
-    
-   
-    ## ------------------------------------------------------------------
-    ## 3. Sample ID Alignment & Auto-Subset across Taxa, Pathways, and Metadata
-    ## ------------------------------------------------------------------
-    
-    # 1. Determine current sample IDs (columns if features are rows)
-    taxa_samples     <- if (all(colnames(taxa) %in% metadata[["sample_id"]])) colnames(taxa) else rownames(taxa)
-    pathway_samples  <- if (all(colnames(pathways) %in% metadata[["sample_id"]])) colnames(pathways) else rownames(pathways)
-    meta_samples     <- as.character(metadata[["sample_id"]])
-    
-    # 2. Find common samples across all three datasets
-    common_samples <- intersect(intersect(taxa_samples, pathway_samples), meta_samples)
-    
-    if (length(common_samples) == 0) {
-      stop(
-        "No overlapping sample IDs found across 'taxa', 'pathways', and 'metadata'. ",
-        "Please verify that sample IDs match across all three datasets."
-      )
-    }
-    
-    if (length(common_samples) < length(meta_samples)) {
-      message(sprintf("[MiCARA] Subsetting data to %d overlapping samples found across all inputs.", length(common_samples)))
-    }
-    
-    # 3. Orient matrices so samples are in ROWS and reorder to match metadata
-    align_matrix <- function(mat, samples) {
-      # Transpose if samples are currently in columns
-      if (all(samples %in% colnames(mat))) {
-        mat <- t(mat)
-      }
-      return(mat[samples, , drop = FALSE])
-    }
-    
-    taxa     <- align_matrix(taxa, common_samples)
-    pathways <- align_matrix(pathways, common_samples)
-    metadata <- metadata[match(common_samples, meta_samples), , drop = FALSE]
-    
-    ## ------------------------------------------------------------------
-    ## 4. Mandatory metadata columns
-    ## ------------------------------------------------------------------
-    
-    mandatory <- c("sample_id", "disease")
-    missing_mandatory <- setdiff(mandatory, names(metadata))
-    
-    if (length(missing_mandatory) > 0) {
-      stop("Missing mandatory metadata column(s): ", paste(missing_mandatory, collapse = ", "))
-    }
-    
-    # ------------------------------------------------------------------
-    # 4b. Flexible detection for total read counts / depth column
-    # ------------------------------------------------------------------
-    read_count_aliases <- c(
-      "number_reads", "sequencing_depth", "total_reads", 
-      "read_count", "read_counts", "n_reads", "depth", "reads"
+    numeric_remaining <- vapply(
+      df[, -1, drop = FALSE],
+      is.numeric,
+      logical(1)
     )
     
-    # Search for matching column names (case-insensitive)
-    metadata_lower <- tolower(names(metadata))
-    matched_alias_idx <- which(metadata_lower %in% read_count_aliases)
-    
-    if (length(matched_alias_idx) > 0) {
-      found_col <- names(metadata)[matched_alias_idx[1]]
-      
-      # Rename to standardized "number_reads" internal key
-      if (found_col != "number_reads") {
-        names(metadata)[matched_alias_idx[1]] <- "number_reads"
-        if (verbose) {
-          message("[Info] Detected sequencing depth column '", found_col, "' and mapped it to 'number_reads'.")
-        }
-      }
-    } else if (verbose) {
-      message(
-        "[Info] No total read count column detected in metadata. ",
-        "If you have relative abundance tables and want ANCOM-BC2 raw count reconstruction, ",
-        "include a column named 'number_reads' or 'sequencing_depth'."
+    if (!all(numeric_remaining)) {
+      stop(
+        "'", label,
+        "' contains non-numeric sample columns. ",
+        "Expected a feature-name column followed by numeric abundance values.",
+        call. = FALSE
       )
     }
     
-    ## ------------------------------------------------------------------
-    ## 5. Disease filtering 
-    ## ------------------------------------------------------------------
+    feature_names <- as.character(df[[1]])
     
-    disease_counts  <- table(metadata$disease)
-    keep_disease    <- names(disease_counts[disease_counts >= disease_min_samples])
-    removed_disease <- setdiff(names(disease_counts), keep_disease)
+    if (anyNA(feature_names) || any(feature_names == "")) {
+      stop(
+        "'", label,
+        "' contains missing or empty feature names.",
+        call. = FALSE
+      )
+    }
     
-    keep_samples <- metadata$disease %in% keep_disease
+    if (anyDuplicated(feature_names)) {
+      duplicated_names <- unique(
+        feature_names[duplicated(feature_names)]
+      )
+      
+      stop(
+        "'", label,
+        "' contains duplicated feature names: ",
+        paste(head(duplicated_names, 5L), collapse = ", "),
+        if (length(duplicated_names) > 5L) " ..." else "",
+        call. = FALSE
+      )
+    }
     
-    n_removed_samples <- sum(!keep_samples)
+    ## Remove feature-name column
+    mat <- df[, -1, drop = FALSE]
     
-    metadata <- metadata[keep_samples, ]
-    taxa     <- taxa[,     keep_samples, drop = FALSE]
-    pathways <- pathways[, keep_samples, drop = FALSE]
+    ## Convert to numeric matrix
+    mat <- as.matrix(mat)
+    storage.mode(mat) <- "double"
     
-    ## ------------------------------------------------------------------
-    ## 6. Optional covariate checking and missing-data filtering
-    ## ------------------------------------------------------------------
+    ## Assign feature names
+    rownames(mat) <- feature_names
     
-    expected_optional <- c("study_name", "age", "age_category", "gender", "BMI")
-    # 1. Map lower-case expected names to their standard casing
-    expected_map <- stats::setNames(expected_optional, tolower(expected_optional))
-    # 2. Find matching columns in metadata (case-insensitive)
-    matched_idx  <- match(tolower(names(metadata)), names(expected_map))
-    # 3. Rename any matched columns in metadata to standard casing
-    names(metadata)[!is.na(matched_idx)] <- expected_map[matched_idx[!is.na(matched_idx)]]
-    # 4. Filter for available expected covariates (now matching exact casing)
-    available_optional <- intersect(expected_optional, names(metadata))
-    # 5. Check missingness on available covariates
-    missing_fraction <- vapply(
-      available_optional,
-      function(x) mean(is.na(metadata[[x]])),
-      numeric(1)
-    )
+    ## Sample IDs must exist
+    if (is.null(colnames(mat)) ||
+        anyNA(colnames(mat)) ||
+        any(colnames(mat) == "")) {
+      
+      stop(
+        "'", label,
+        "' contains missing or empty sample IDs.",
+        call. = FALSE
+      )
+    }
     
-    keep_covariates   <- names(missing_fraction[missing_fraction <= metadata_missing_cutoff])
-    remove_covariates <- names(missing_fraction[missing_fraction >  metadata_missing_cutoff])
+    if (anyDuplicated(colnames(mat))) {
+      duplicated_ids <- unique(
+        colnames(mat)[duplicated(colnames(mat))]
+      )
+      
+      stop(
+        "'", label,
+        "' contains duplicated sample IDs: ",
+        paste(head(duplicated_ids, 5L), collapse = ", "),
+        if (length(duplicated_ids) > 5L) " ..." else "",
+        call. = FALSE
+      )
+    }
     
+    ## Check values
+    if (anyNA(mat) || any(!is.finite(mat))) {
+      stop(
+        "'", label,
+        "' contains missing or non-finite abundance values.",
+        call. = FALSE
+      )
+    }
+    
+    if (any(mat < 0)) {
+      stop(
+        "'", label,
+        "' contains negative abundance values.",
+        call. = FALSE
+      )
+    }
+    
+    mat
+  }
   
-    ## ------------------------------------------------------------------
-    ## 7. HELPER: Detect abundance scale
-    ## ------------------------------------------------------------------
-    
-    detect_scale <- function(mat) {
-      if (any(mat < 0, na.rm = TRUE)) {
-        return("transformed/log")
-      }
-      
-      totals       <- colSums(mat, na.rm = TRUE)
-      median_total <- stats::median(totals, na.rm = TRUE)
-      max_val      <- max(mat, na.rm = TRUE)
-      
-      # Proportion: bounded by 1.0 (holds true even after removing unmapped rows)
-      if (max_val <= 1.0 && median_total <= 1.0) {
-        return("proportion")
-      } 
-      
-      # Percentage: values <= 100 with sample totals centered near or below 100
-      if (max_val <= 100 && (abs(median_total - 100) < 15 || max_val > 1)) {
-        return("percentage")
-      } 
-      
-      # Raw counts: large integer abundances
-      if (median_total > 1) {
-        return("counts")
-      }
-      
-      stop("Unable to determine abundance scale. Median sample total = ", round(median_total, 2))
-    }
-    
-    # Detect scale for both matrices
-    taxa_scale     <- detect_scale(taxa)
-    pathways_scale <- detect_scale(pathways)
-    
-    
-    ## ------------------------------------------------------------------
-    ## 8. HELPER: Back-calculate raw counts from relative abundance 
-    ## ------------------------------------------------------------------
-    
-    reconstruct_counts <- function(mat, scale, sample_reads) {
-      if (scale == "counts") {
-        return(mat)
-      }
-      
-      if (is.null(sample_reads) || any(is.na(sample_reads))) {
-        warning("Cannot reconstruct counts: 'number_reads' column is missing or contains NAs in metadata. Proceeding without reconstruction.")
-        return(mat)
-      }
-      
-      if (scale == "percentage") {
-        prop_mat <- mat / 100
-      } else if (scale == "proportion") {
-        prop_mat <- mat
-      } else {
-        warning("Scale '", scale, "' cannot be automatically converted to counts. Returning original matrix.")
-        return(mat)
-      }
-      # Reconstruct counts: proportion * total sample reads, rounded to nearest integer
-      count_mat <- round(sweep(prop_mat, 2, sample_reads, FUN = "*"))
-      
-      message(
-        "\n[CAVEAT] Back-calculated estimated counts by multiplying relative abundances ",
-        "by metadata$number_reads. Note that these are approximations, and true raw integer ",
-        "counts are always preferred for ANCOM-BC2 models.\n"
-      )
-      
-      return(count_mat)
-    } 
-    
-    ## ------------------------------------------------------------------
-    ## 9. VERIFICATION & RECONSTRUCTION PIPELINE
-    ## ------------------------------------------------------------------
-    # Check if total read counts are available and complete
-    has_reads <- "number_reads" %in% names(metadata) && !any(is.na(metadata$number_reads))
-    
-    process_dataset <- function(mat, scale, name) {
-      if (scale %in% c("percentage", "proportion")) {
-        if (has_reads) {
-          warning(
-            "[", name, "] Input is in '", scale, "' scale. ANCOM-BC2 strictly expects raw counts. ",
-            "Back-calculating estimated raw counts using 'metadata$number_reads'.",
-            call. = FALSE
-          )
-          return(reconstruct_counts(mat, scale, metadata$number_reads))
-        } else {
-          warning(
-            "[", name, "] Input is in '", scale, "' scale and 'metadata$number_reads' was not provided. ",
-            "ANCOM-BC2 strictly expects raw counts, but proceeding with relative abundances as requested.",
-            call. = FALSE
-          )
-        }
-      }
-      return(mat)
-    }
-    
-    taxa     <- process_dataset(taxa, taxa_scale, "taxa")
-    pathways <- process_dataset(pathways, pathways_scale, "pathways")
-    
-    ## ------------------------------------------------------------------
-    ## 10. Report
-    ## ------------------------------------------------------------------
-    
-    if (verbose) {
-      # Helper to construct clear scale reporting status
-      get_scale_status <- function(initial_scale) {
-        if (initial_scale == "counts") {
-          return("Raw counts (Unmodified)")
-        } else if (initial_scale %in% c("percentage", "proportion")) {
-          if (has_reads) {
-            return(paste0(initial_scale, " -> Reconstructed to estimated raw counts (via number_reads)"))
-          } else {
-            return(paste0(initial_scale, " -> Left unmodified (number_reads unavailable)"))
-          }
-        } else {
-          return(paste0(initial_scale, " (Unmodified)"))
-        }
-      }
-      
-      cat("\n========== MiCARA Input Report ==========\n")
-      cat("Samples retained:      ", ncol(taxa), "\n")
-      cat("Samples removed:       ", n_removed_samples, "\n")
-      cat("Diseases retained:     ", length(keep_disease), "\n")
-      if (length(removed_disease) > 0) {
-        cat("Diseases removed:      ", paste(removed_disease, collapse = ", "), 
-            paste0("(n < ", disease_min_samples, ")\n"))
-      } else {
-        cat("Diseases removed:      none\n")
-      }
-      
-      cat("Taxa abundance scale:  ", get_scale_status(taxa_scale), "\n")
-      cat("Pathway scale:         ", get_scale_status(pathways_scale), "\n")
-      
-      cat("Covariates retained:   ", 
-          if (length(keep_covariates) > 0) paste(keep_covariates, collapse = ", ") else "none", "\n")
-      cat("Covariates removed:    ", 
-          if (length(remove_covariates) > 0) {
-            paste0(paste(remove_covariates, collapse = ", "), " (>", metadata_missing_cutoff * 100, "% missing)")
-          } else {
-            "none"
-          }, "\n")
-      cat("------------------------------------------\n")
-    }
-    
-    ## ------------------------------------------------------------------
-    ## 11. Return
-    ## ------------------------------------------------------------------
-    # Determine final output scale based on whether reconstruction occurred
-    taxa_final_scale     <- if (taxa_scale %in% c("percentage", "proportion") && has_reads) "counts" else taxa_scale
-    pathways_final_scale <- if (pathways_scale %in% c("percentage", "proportion") && has_reads) "counts" else pathways_scale
-    
-    # Final safety check: ensure metadata rows match taxa column order exactly
-    metadata <- metadata[match(colnames(taxa), metadata$sample_id), ]
-    
-    structure(
-      list(
-        taxa               = taxa,
-        pathways           = pathways,
-        metadata           = metadata,
-        abundance_type    = list(
-          detected = list(taxa = taxa_scale, pathways = pathways_scale),
-          final    = list(taxa = taxa_final_scale, pathways = pathways_final_scale)
-        ),
-        confounders        = if (is.null(keep_covariates)) character(0) else keep_covariates,
-        removed_covariates = if (is.null(remove_covariates)) character(0) else remove_covariates,
-        removed_diseases   = if (is.null(removed_disease)) character(0) else removed_disease
-      ),
-      class = "micara_input"
+  taxa <- prepare_abundance_table(taxa, "taxa")
+  pathways <- prepare_abundance_table(pathways, "pathways")
+  
+  ## ================================================================
+  ## 3. Sample ID checks
+  ## ================================================================
+  
+  taxa_samples <- colnames(taxa)
+  pathway_samples <- colnames(pathways)
+  metadata_samples <- as.character(metadata$sample_id)
+  
+  if (anyNA(metadata_samples) || any(metadata_samples == "")) {
+    stop(
+      "'metadata$sample_id' contains missing or empty sample IDs.",
+      call. = FALSE
     )
   }
   
-
+  if (anyDuplicated(metadata_samples)) {
+    duplicated_ids <- unique(
+      metadata_samples[duplicated(metadata_samples)]
+    )
+    
+    stop(
+      "'metadata$sample_id' contains duplicated sample IDs: ",
+      paste(head(duplicated_ids, 5L), collapse = ", "),
+      if (length(duplicated_ids) > 5L) " ..." else "",
+      call. = FALSE
+    )
+  }
+  
+  ## Taxa and pathways must contain exactly the same samples
+  if (!setequal(taxa_samples, pathway_samples)) {
+    
+    taxa_only <- setdiff(taxa_samples, pathway_samples)
+    pathway_only <- setdiff(pathway_samples, taxa_samples)
+    
+    stop(
+      "Taxa and pathway sample IDs do not match.\n",
+      "Samples only in taxa: ",
+      paste(head(taxa_only, 5L), collapse = ", "),
+      if (length(taxa_only) > 5L) " ..." else "",
+      "\nSamples only in pathways: ",
+      paste(head(pathway_only, 5L), collapse = ", "),
+      if (length(pathway_only) > 5L) " ..." else "",
+      call. = FALSE
+    )
+  }
+  
+  ## Metadata must contain all abundance samples
+  missing_metadata <- setdiff(taxa_samples, metadata_samples)
+  
+  if (length(missing_metadata) > 0L) {
+    
+    stop(
+      length(missing_metadata),
+      " sample(s) present in taxa/pathways but absent from metadata: ",
+      paste(head(missing_metadata, 5L), collapse = ", "),
+      if (length(missing_metadata) > 5L) " ..." else "",
+      call. = FALSE
+    )
+  }
+  
+  ## Remove metadata-only samples if present
+  extra_metadata <- setdiff(metadata_samples, taxa_samples)
+  
+  if (length(extra_metadata) > 0L && verbose) {
+    
+    warning(
+      length(extra_metadata),
+      " metadata sample(s) are not present in the abundance tables ",
+      "and will be removed.",
+      call. = FALSE
+    )
+  }
+  
+  ## ================================================================
+  ## 4. Align all three datasets by sample ID
+  ## ================================================================
+  
+  common_samples <- taxa_samples
+  
+  taxa <- taxa[, common_samples, drop = FALSE]
+  pathways <- pathways[, common_samples, drop = FALSE]
+  
+  metadata <- metadata[
+    match(common_samples, metadata$sample_id),
+    ,
+    drop = FALSE
+  ]
+  
+  ## Rename disease column internally to 'disease'
+  ## This allows users to supply another column name.
+  metadata$disease <- metadata[[disease_col]]
+  
+  ## Final alignment check
+  if (!identical(colnames(taxa), colnames(pathways)) ||
+      !identical(colnames(taxa), metadata$sample_id)) {
+    
+    stop(
+      "Internal alignment error: taxa, pathways and metadata ",
+      "sample IDs are not identical after alignment.",
+      call. = FALSE
+    )
+  }
+  
+  ## ================================================================
+  ## 5. Disease filtering
+  ## ================================================================
+  
+  if (anyNA(metadata$disease) || any(metadata$disease == "")) {
+    warning(
+      "Some samples have missing disease labels and will be removed.",
+      call. = FALSE
+    )
+    
+    keep <- !is.na(metadata$disease) &
+      metadata$disease != ""
+    
+    metadata <- metadata[keep, , drop = FALSE]
+    taxa <- taxa[, keep, drop = FALSE]
+    pathways <- pathways[, keep, drop = FALSE]
+  }
+  
+  disease_counts <- table(metadata$disease)
+  
+  keep_diseases <- names(
+    disease_counts[disease_counts >= disease_min_samples]
+  )
+  
+  removed_diseases <- setdiff(
+    names(disease_counts),
+    keep_diseases
+  )
+  
+  ## IMPORTANT:
+  ## Select sample IDs rather than applying the metadata logical
+  ## vector directly to abundance-table columns.
+  keep_sample_ids <- metadata$sample_id[
+    metadata$disease %in% keep_diseases
+  ]
+  
+  taxa <- taxa[
+    ,
+    keep_sample_ids,
+    drop = FALSE
+  ]
+  
+  pathways <- pathways[
+    ,
+    keep_sample_ids,
+    drop = FALSE
+  ]
+  
+  metadata <- metadata[
+    match(keep_sample_ids, metadata$sample_id),
+    ,
+    drop = FALSE
+  ]
+  
+  ## Final disease-filter alignment check
+  if (!identical(colnames(taxa), colnames(pathways)) ||
+      !identical(colnames(taxa), metadata$sample_id)) {
+    
+    stop(
+      "Internal alignment error after disease filtering.",
+      call. = FALSE
+    )
+  }
+  
+  ## ================================================================
+  ## 6. Optional metadata / confounder assessment
+  ## ================================================================
+  
+  recognised_covariates <- c(
+    "study_name",
+    "age",
+    "age_category",
+    "gender",
+    "BMI"
+  )
+  
+  available_covariates <- intersect(
+    recognised_covariates,
+    names(metadata)
+  )
+  
+  ## Warn about expected columns with different capitalisation
+  lower_names <- tolower(names(metadata))
+  
+  possible_mismatches <- recognised_covariates[
+    !(recognised_covariates %in% names(metadata)) &
+      tolower(recognised_covariates) %in% lower_names
+  ]
+  
+  if (length(possible_mismatches) > 0L) {
+    
+    actual_names <- names(metadata)[
+      match(tolower(possible_mismatches), lower_names)
+    ]
+    
+    warning(
+      "Possible metadata naming mismatch: ",
+      paste(
+        paste0(
+          possible_mismatches,
+          " found as '",
+          actual_names,
+          "'"
+        ),
+        collapse = "; "
+      ),
+      ". Rename columns to the expected names if they should be used.",
+      call. = FALSE
+    )
+  }
+  
+  ## Missingness assessment
+  missing_fraction <- vapply(
+    available_covariates,
+    function(x) {
+      mean(is.na(metadata[[x]]))
+    },
+    numeric(1)
+  )
+  
+  retained_covariates <- names(
+    missing_fraction[
+      missing_fraction <= metadata_missing_cutoff
+    ]
+  )
+  
+  removed_covariates <- names(
+    missing_fraction[
+      missing_fraction > metadata_missing_cutoff
+    ]
+  )
+  
+  ## ================================================================
+  ## 7. Abundance scale detection
+  ## ================================================================
+  
+  detect_scale <- function(mat, label) {
+    
+    totals <- colSums(mat)
+    
+    if (any(!is.finite(totals)) || any(totals <= 0)) {
+      stop(
+        "'", label,
+        "' contains sample(s) with zero or invalid total abundance.",
+        call. = FALSE
+      )
+    }
+    
+    median_total <- median(totals)
+    
+    if (abs(median_total - 100) <= 5) {
+      return("percentage")
+    }
+    
+    if (abs(median_total - 1) <= 0.05) {
+      return("proportion")
+    }
+    
+    ## Counts are better identified by integer-like values
+    ## and substantially larger sample totals.
+    if (
+      median_total > 1000 &&
+      all(abs(mat - round(mat)) < 1e-8)
+    ) {
+      return("counts")
+    }
+    
+    stop(
+      "Unable to determine abundance scale for '", label,
+      "'. Median sample total = ",
+      round(median_total, 4),
+      ". Expected percentage (~100), proportion (~1), ",
+      "or count data (>1000 with integer-like values).",
+      call. = FALSE
+    )
+  }
+  
+  taxa_scale <- detect_scale(taxa, "taxa")
+  pathways_scale <- detect_scale(pathways, "pathways")
+  
+  ## ================================================================
+  ## 8. Normalise to percentage scale
+  ## ================================================================
+  
+  normalize_to_percentage <- function(mat, scale) {
+    
+    if (scale == "percentage") {
+      return(mat)
+    }
+    
+    if (scale == "proportion") {
+      return(mat * 100)
+    }
+    
+    if (scale == "counts") {
+      
+      totals <- colSums(mat)
+      
+      return(
+        sweep(
+          mat,
+          2,
+          totals,
+          FUN = "/"
+        ) * 100
+      )
+    }
+    
+    stop(
+      "Unknown abundance scale: ",
+      scale,
+      call. = FALSE
+    )
+  }
+  
+  if (normalise) {
+    
+    taxa <- normalize_to_percentage(
+      taxa,
+      taxa_scale
+    )
+    
+    pathways <- normalize_to_percentage(
+      pathways,
+      pathways_scale
+    )
+  }
+  
+  ## ================================================================
+  ## 9. QC report
+  ## ================================================================
+  
+  if (verbose) {
+    
+    cat("\n")
+    cat("========== MiCARA Input QC ==========\n")
+    
+    cat(
+      "Samples retained:       ",
+      ncol(taxa),
+      "\n"
+    )
+    
+    cat(
+      "Diseases retained:      ",
+      length(keep_diseases),
+      "\n"
+    )
+    
+    cat(
+      "Disease minimum n:      ",
+      disease_min_samples,
+      "\n"
+    )
+    
+    if (length(removed_diseases) > 0L) {
+      
+      cat(
+        "Diseases removed:       ",
+        paste(removed_diseases, collapse = ", "),
+        "\n"
+      )
+      
+    } else {
+      
+      cat(
+        "Diseases removed:       None\n"
+      )
+    }
+    
+    cat(
+      "Taxa scale detected:    ",
+      taxa_scale,
+      "\n"
+    )
+    
+    cat(
+      "Pathway scale detected: ",
+      pathways_scale,
+      "\n"
+    )
+    
+    cat(
+      "Normalised:             ",
+      normalise,
+      "\n"
+    )
+    
+    if (length(retained_covariates) > 0L) {
+      
+      cat(
+        "Covariates retained:    ",
+        paste(retained_covariates, collapse = ", "),
+        "\n"
+      )
+      
+    } else {
+      
+      cat(
+        "Covariates retained:    None\n"
+      )
+    }
+    
+    if (length(removed_covariates) > 0L) {
+      
+      cat(
+        "Covariates removed:     ",
+        paste(removed_covariates, collapse = ", "),
+        " (> ",
+        metadata_missing_cutoff * 100,
+        "% missing)\n",
+        sep = ""
+      )
+      
+    } else {
+      
+      cat(
+        "Covariates removed:     None\n"
+      )
+    }
+    
+    cat(
+      "=====================================\n\n"
+    )
+  }
+  
+  ## ================================================================
+  ## 10. Return MiCARA input object
+  ## ================================================================
+  
+  structure(
+    list(
+      taxa = taxa,
+      pathways = pathways,
+      metadata = metadata,
+      
+      abundance_type = list(
+        taxa = taxa_scale,
+        pathways = pathways_scale
+      ),
+      
+      confounders = retained_covariates,
+      
+      removed_covariates = removed_covariates,
+      
+      removed_diseases = removed_diseases
+    ),
+    class = "micara_input"
+  )
+}
  
