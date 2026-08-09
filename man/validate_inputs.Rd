@@ -29,7 +29,8 @@ and pathways as rows. Follows the same structure as \code{taxa}.}
 sequencing depth (\code{number_reads}, \code{sequencing_depth},
 \code{total_reads}, \code{n_reads}, or \code{depth}—used to reconstruct
 raw counts if relative abundance is provided), \code{study_name},
-\code{age}, \code{age_category}, \code{gender}, and \code{BMI}.}
+\code{age}, \code{age_category}, \code{gender}, and \code{BMI}. Character-encoded
+numeric fields are automatically coerced to numeric.}
 
 \item{disease_col}{Character string specifying the metadata column containing disease cohort labels.}
 
@@ -64,5 +65,7 @@ detects abundance scales (counts vs. relative abundances), back-calculates
 estimated raw integer counts when necessary using sequencing depth,
 filters rare disease groups, and evaluates metadata covariate missingness.
 Automatically detects and drops leading serial or index columns
-(e.g., \code{1:N}, \code{X}, \code{Unnamed: 0}) if present.
+(e.g., \code{1:N}, \code{X}, \code{Unnamed: 0}) if present, and automatically coerces
+text-encoded quantitative metadata covariates (e.g., \code{"unknown"} or \code{"NA"} in
+\code{age} or \code{BMI}) into numeric \code{NA} values for downstream imputation.
 }

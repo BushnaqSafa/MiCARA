@@ -6,7 +6,9 @@
 #' estimated raw integer counts when necessary using sequencing depth, 
 #' filters rare disease groups, and evaluates metadata covariate missingness.
 #' Automatically detects and drops leading serial or index columns 
-#' (e.g., \code{1:N}, \code{X}, \code{Unnamed: 0}) if present.
+#' (e.g., \code{1:N}, \code{X}, \code{Unnamed: 0}) if present, and automatically coerces 
+#' text-encoded quantitative metadata covariates (e.g., \code{"unknown"} or \code{"NA"} in 
+#' \code{age} or \code{BMI}) into numeric \code{NA} values for downstream imputation.
 #'
 #' @param taxa data.frame of taxon abundances with samples as columns and 
 #'   taxa as rows. Rownames can be set directly or provided in a leading 
@@ -19,7 +21,8 @@
 #'   sequencing depth (\code{number_reads}, \code{sequencing_depth}, 
 #'   \code{total_reads}, \code{n_reads}, or \code{depth}—used to reconstruct 
 #'   raw counts if relative abundance is provided), \code{study_name}, 
-#'   \code{age}, \code{age_category}, \code{gender}, and \code{BMI}.
+#'   \code{age}, \code{age_category}, \code{gender}, and \code{BMI}. Character-encoded 
+#'   numeric fields are automatically coerced to numeric.
 #' @param disease_min_samples Minimum number of samples required to retain 
 #'   a disease group (default 10).
 #' @param metadata_missing_cutoff Maximum allowed fraction of missing 
@@ -143,6 +146,19 @@
     # Standardize internally so rest of function can always rely on metadata$disease
     metadata$disease <- metadata[[disease_col]]
     
+    ## ------------------------------------------------------------------
+    ## 1d. Convert character quantitative covariates to numeric NA fro imputation (ex: age or BMI values : "NA" or "unknown" to numeric NA)
+    ## ------------------------------------------------------------------
+    
+    # Auto-convert known quantitative covariates from character to numeric
+    num_covariates <- intersect(c("age", "BMI", "number_reads", "sequencing_depth", "total_reads", "n_reads", "depth"), colnames(metadata))
+    
+    for (col in num_covariates) {
+      if (!is.numeric(metadata[[col]])) {
+        metadata[[col]] <- suppressWarnings(as.numeric(as.character(metadata[[col]])))
+        message(sprintf("[MiCARA] Auto-converted metadata covariate '%s' to numeric.", col))
+      }
+    }
     
     ## ------------------------------------------------------------------
     ## 2. Flexible feature-name handling + numeric content check
