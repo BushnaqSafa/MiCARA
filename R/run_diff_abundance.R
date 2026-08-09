@@ -66,13 +66,14 @@
 #' @importFrom ANCOMBC ancombc2
 #' @importFrom stats relevel na.omit
 #' @export
-run_diff_abundance <- function(
+
+  run_diff_abundance <- function(
     micara_obj,
     feature_type       = c("taxa", "pathways"),
     fix_effects        = NULL,
     exclude_covariates = NULL,
     rand_effect        = "study_name",
-    reference_level    = "healthy",
+    reference_level    = NULL, # Set default to NULL for dynamic matching
     p_adj_method       = "BH",
     prv_cut            = 0,
     alpha              = 0.05,
@@ -83,8 +84,40 @@ run_diff_abundance <- function(
     use_robust         = TRUE,
     n_cores            = 1,
     verbose            = TRUE
-) {
-  
+  ) {
+    
+    #Auto-detection of reference level terms without throwing an error
+    # Detect disease column and unique levels
+    disease_col  <- attr(micara_obj, "disease_col") %||% "disease"
+    unique_vals  <- unique(na.omit(micara_obj$metadata[[disease_col]]))
+    
+    # Dynamic auto-detection if reference_level is missing
+    if (is.null(reference_level)) {
+      common_controls <- c("control", "healthy", "ctr", "hc", "wt", "baseline", "normal")
+      match_idx       <- match(tolower(unique_vals), common_controls)
+      
+      if (any(!is.na(match_idx))) {
+        reference_level <- unique_vals[which.min(match_idx)]
+        if (verbose) {
+          message(sprintf("[Info] Auto-selected '%s' as reference level for %s.", reference_level, disease_col))
+        }
+      } else {
+        stop(sprintf(
+          "Could not auto-detect baseline level. Please specify 'reference_level'. Choices: %s",
+          paste(paste0("'", unique_vals, "'"), collapse = ", ")
+        ))
+      }
+    }
+    
+    # Validate supplied reference_level exists
+    if (!reference_level %in% unique_vals) {
+      stop(sprintf(
+        "reference_level '%s' not found in metadata$%s. Available levels: %s",
+        reference_level, disease_col, paste(paste0("'", unique_vals, "'"), collapse = ", ")
+      ))
+    }
+    
+
   ## ------------------------------------------------------------------
   ## 1. Validate Input & Dependencies
   ## ------------------------------------------------------------------

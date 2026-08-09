@@ -68,7 +68,62 @@
     metadata <- coerce_to_df(metadata, "metadata")
     
     ## ------------------------------------------------------------------
-    ## 1b. Disease / Group column validation & standardization
+    ## 1b. Helper: Drop serial numbers & handle feature row names
+    ## ------------------------------------------------------------------
+    move_first_col_to_rownames <- function(df, label) {
+      df <- as.data.frame(df, stringsAsFactors = FALSE)
+      if (ncol(df) == 0) return(df)
+      
+      # Step A: Detect and drop serial / index column from Column 1
+      c1     <- df[[1]]
+      cn     <- colnames(df)[1]
+      is_seq <- is.numeric(c1) && (identical(as.integer(c1), seq_len(nrow(df))) || identical(as.integer(c1), 0L:(nrow(df) - 1L)))
+      is_idx <- grepl("^(X|Unnamed|index|serial|row_?num)", cn, ignore.case = TRUE)
+      
+      if (is_seq || is_idx) {
+        message(sprintf("[MiCARA] Automatically dropped serial/index column '%s' from %s.", cn, label))
+        df <- df[, -1, drop = FALSE]
+      }
+      
+      # Step B: Evaluate remaining columns
+      is_numeric_col <- vapply(df, is.numeric, logical(1))
+      
+      # All numeric -> already clean matrix with rownames attached
+      if (all(is_numeric_col)) {
+        return(df)
+      }
+      
+      # Non-numeric 1st column + numeric rest -> move feature names to rownames
+      if (!is_numeric_col[1] && all(is_numeric_col[-1])) {
+        feature_names <- as.character(df[[1]])
+        
+        if (any(duplicated(feature_names))) {
+          stop(
+            "'", label, "' first column contains duplicate names; ",
+            "cannot use as unique row identifiers.",
+            call. = FALSE
+          )
+        }
+        
+        df <- df[, -1, drop = FALSE]
+        rownames(df) <- feature_names
+        return(df)
+      }
+      
+      stop(
+        "'", label, "' contains non-numeric columns that could not be auto-resolved. ",
+        "Provide either (a) rownames = feature names with all columns numeric, or ",
+        "(b) a single leading non-numeric column of feature names followed by numeric sample columns.",
+        call. = FALSE
+      )
+    }
+    
+    # Clean taxa and pathways
+    taxa     <- move_first_col_to_rownames(taxa,     "taxa")
+    pathways <- move_first_col_to_rownames(pathways, "pathways")
+    
+    ## ------------------------------------------------------------------
+    ## 1c. Disease / Group column validation & standardization
     ## ------------------------------------------------------------------
     
     if (!disease_col %in% colnames(metadata)) {

@@ -94,10 +94,12 @@ compute_residualCLR_correlations <- function(
     retain_all_pairs        = TRUE,
     verbose                 = TRUE
 ) {
+  
 
   ## ------------------------------------------------------------------
   ## 1. Validate inputs and resolve differential-abundance objects
   ## ------------------------------------------------------------------
+  
   #check class types
   if (!inherits(micara_obj, "micara_input")) {
     stop(
@@ -136,7 +138,10 @@ compute_residualCLR_correlations <- function(
       is.na(retain_all_pairs)) {
     stop("'retain_all_pairs' must be TRUE or FALSE.", call. = FALSE)
   }
-  #Resolves Input Objects
+  ## ----------------------------------------------------------------
+  ## 2. Metadata & differential abundance resolution
+  ## ----------------------------------------------------------------
+  
   resolved <- .resolve_diffab_objects(
     diffab_obj     = diffab_obj,
     taxa_diffab    = taxa_diffab,
@@ -149,6 +154,9 @@ compute_residualCLR_correlations <- function(
   .validate_diffab_object(pathway_diffab, "pathways")
 
   metadata <- as.data.frame(micara_obj$metadata, stringsAsFactors = FALSE)
+  disease_col   <- attr(micara_obj, "disease_col") %||% "disease"
+  sample_id_col <- attr(micara_obj, "sample_id_col") %||% "sample_id"
+  
   #Checks Metadata
   required_metadata <- c("sample_id", "disease")
   missing_metadata <- setdiff(required_metadata, names(metadata))
@@ -173,38 +181,47 @@ compute_residualCLR_correlations <- function(
   metadata$sample_id <- as.character(metadata$sample_id)
   metadata$disease   <- make.names(as.character(metadata$disease))
 
-  ## Check if requested covariates available
+  ## ------------------------------------------------------------------
+  ## 3. Resolve & Validate Covariates
+  ## ------------------------------------------------------------------
   if (is.null(covariates)) {
     preferred <- c("age_category", "BMI", "gender", "study_name")
-
-    retained <- micara_obj$confounders
-    if (is.null(retained)) {
-      retained <- character(0)
-    }
-
+    retained  <- micara_obj$confounders %||% character(0)
     covariates <- intersect(preferred, retained)
-
-    ## Defensive fallback for older micara_input objects that do not carry
-    ## a confounders field.
+    
+    # Dynamic fallback: grab non-ID/non-disease columns if retain list is empty
     if (length(covariates) == 0L) {
-      covariates <- intersect(preferred, names(metadata))
+      exclude_cols <- c(sample_id_col, disease_col, "study_name")
+      covariates   <- setdiff(colnames(metadata), exclude_cols)
+    }
+    
+    if (verbose && length(covariates) > 0L) {
+      message("[Info] Auto-selected covariates for residualization: ", paste(covariates, collapse = ", "))
     }
   }
-
+  
   covariates <- unique(as.character(covariates))
-  covariates <- setdiff(covariates, c("sample_id", "disease"))
-
+  covariates <- setdiff(covariates, c(sample_id_col, disease_col))
+  
   missing_covariates <- setdiff(covariates, names(metadata))
   if (length(missing_covariates) > 0L) {
-    stop(
-      "Covariate(s) not found in metadata: ",
-      paste(missing_covariates, collapse = ", "),
-      call. = FALSE
-    )
+    stop("Covariate(s) not found in metadata: ", paste(missing_covariates, collapse = ", "), call. = FALSE)
+  }
+  
+  # Validate missingness on covariates
+  if (length(covariates) > 0L) {
+    cov_df <- metadata[, covariates, drop = FALSE]
+    if (anyNA(cov_df)) {
+      na_cols <- covariates[colSums(is.na(cov_df)) > 0]
+      stop(sprintf(
+        "Missing values (NA) in covariates: %s. Run 'impute_metadata()' before running this step.",
+        paste(na_cols, collapse = ", ")
+      ), call. = FALSE)
+    }
   }
 
   ## ------------------------------------------------------------------
-  ## 2. CLR-transform the complete feature matrices once
+  ## 4. CLR-transform the complete feature matrices once
   ## ------------------------------------------------------------------
 
   pseudocounts <- .resolve_pseudocounts(pseudocount)

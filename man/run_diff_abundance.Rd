@@ -10,7 +10,7 @@ run_diff_abundance(
   fix_effects = NULL,
   exclude_covariates = NULL,
   rand_effect = "study_name",
-  reference_level = "healthy",
+  reference_level = NULL,
   p_adj_method = "BH",
   prv_cut = 0,
   alpha = 0.05,
