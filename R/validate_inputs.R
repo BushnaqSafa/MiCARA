@@ -237,9 +237,9 @@
     ## ------------------------------------------------------------------
     
     # 1. Determine current sample IDs (columns if features are rows)
-    taxa_samples     <- if (all(colnames(taxa) %in% metadata[[sample_id_col]])) colnames(taxa) else rownames(taxa)
-    pathway_samples  <- if (all(colnames(pathways) %in% metadata[[sample_id_col]])) colnames(pathways) else rownames(pathways)
-    meta_samples     <- as.character(metadata[[sample_id_col]])
+    taxa_samples     <- if (all(colnames(taxa) %in% metadata[["sample_id"]])) colnames(taxa) else rownames(taxa)
+    pathway_samples  <- if (all(colnames(pathways) %in% metadata[["sample_id"]])) colnames(pathways) else rownames(pathways)
+    meta_samples     <- as.character(metadata[["sample_id"]])
     
     # 2. Find common samples across all three datasets
     common_samples <- intersect(intersect(taxa_samples, pathway_samples), meta_samples)
