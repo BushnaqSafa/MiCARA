@@ -550,14 +550,23 @@ compute_residualCLR_correlations <- function(
 
   all_zero_samples <- colnames(mat)[colSums(mat > 0) == 0L]
   if (length(all_zero_samples) > 0L) {
-    stop(
-      "The ", label, " matrix contains all-zero sample(s): ",
-      paste(utils::head(all_zero_samples, 5L), collapse = ", "),
+    warning(
+      "Removing ", length(all_zero_samples), " all-zero sample(s) from ", label,
+      " matrix: ", paste(utils::head(all_zero_samples, 5L), collapse = ", "),
       if (length(all_zero_samples) > 5L) " ..." else "",
       call. = FALSE
     )
+    mat <- mat[, colSums(mat > 0) > 0L, drop = FALSE]
   }
-
+  
+  if (ncol(mat) == 0L) {
+    stop(
+      "The ", label, " matrix contains no samples after removing all-zero columns.",
+      call. = FALSE
+    )
+  }
+  
+  # 3. Calculate pseudocount & CLR
   if (is.null(pseudocount)) {
     positive_values <- mat[mat > 0]
     if (length(positive_values) == 0L) {

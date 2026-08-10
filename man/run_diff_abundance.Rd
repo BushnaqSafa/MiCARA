@@ -12,7 +12,7 @@ run_diff_abundance(
   rand_effect = "study_name",
   reference_level = NULL,
   p_adj_method = "BH",
-  prv_cut = 0,
+  prv_cut = 0.1,
   alpha = 0.05,
   pairwise = FALSE,
   struc_zero = TRUE,

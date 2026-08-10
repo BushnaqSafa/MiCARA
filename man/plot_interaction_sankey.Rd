@@ -7,7 +7,7 @@
 plot_interaction_sankey(
   interactions,
   disease,
-  direction = c("positive", "negative", "both"),
+  direction = c("both", "positive", "negative"),
   top_n_per_pathway = NULL,
   node_colors = c(up = "#2196F3", down = "#F44336", unchanged = "grey70", stable =
     "gray70"),
@@ -23,10 +23,9 @@ plot_interaction_sankey(
 \item{disease}{Name of the disease to plot (must be present in
 \code{names(interactions)}).}
 
-\item{direction}{One of \code{"positive"}, \code{"negative"}, or
-\code{"both"} (default \code{"positive"}). \code{"both"} renders a
-single combined diagram — use with caution, as edge sign is then
-only visible via hover text, not colour.}
+\item{direction}{One of \code{"both"}, \code{"positive"}, or
+\code{"negative"} (default \code{"both"}). When \code{"both"}, returns
+and/or saves separate diagrams for positive and negative links.}
 
 \item{top_n_per_pathway}{Optional integer; if supplied, keeps only
 the \code{top_n_per_pathway} strongest links (by \code{abs(rho)})
@@ -36,31 +35,32 @@ Default \code{NULL} (no trimming — all links passing the cutoffs in
 
 \item{node_colors}{Named character vector mapping node group to
 colour. Default \code{c(up = "#2196F3", down = "#F44336", unchanged =
-"grey70")} — "up"/"down" refer to the ANCOM-BC2 direction of that
-taxon/pathway (enriched/upregulated vs depleted/downregulated),
+"grey70", stable = "gray70")} — "up"/"down" refer to the ANCOM-BC2 direction
+of that taxon/pathway (enriched/upregulated vs depleted/downregulated),
 consistent with \code{node_directions$group} from
 \code{compute_residualCLR_correlations()}.}
 
 \item{font_size, node_width}{Passed to
 \code{networkD3::sankeyNetwork()}.}
 
-\item{save_path}{Optional file path (without extension) to save the
-diagram. If supplied, saves both an interactive \code{.html} (via
-\code{htmlwidgets::saveWidget()}) and a static \code{.png} (via
-\code{webshot2::webshot()} or \code{webshot::webshot()}, whichever
-is installed). Default \code{NULL} (no file saved; the widget is
-still returned and will display in an interactive session).}
+\item{save_path}{Optional file path (with or without extension) to save the
+diagram(s). If supplied, saves interactive \code{.html} (via
+\code{htmlwidgets::saveWidget()}) and static \code{.png} (via
+\code{webshot2::webshot()} or \code{webshot::webshot()}) files. When
+\code{direction = "both"}, suffixes \code{_positive} and \code{_negative}
+are automatically appended to the base path. Default \code{NULL}.}
 }
 \value{
-A \code{networkD3} A htmlwidget object (invisibly if
-\code{save_path} is supplied).
+A \code{networkD3} htmlwidget object (for \code{"positive"} or
+\code{"negative"}), or a named list of two \code{networkD3} htmlwidget
+objects (\code{$positive} and \code{$negative}) when \code{direction = "both"}
+(returned invisibly if \code{save_path} is supplied).
 }
 \description{
 Renders a Sankey diagram of confounder-adjusted taxon-pathway
 correlations for a single disease, as computed by
 \code{\link{compute_residualCLR_correlations}}. Positive and negative
-correlations are rendered as separate diagrams by default (matching
-the two-panel "Figure A/B" convention used throughout this package's
-companion analyses), since mixing directions in one diagram makes the
-biological interpretation ambiguous.
+correlations are rendered as separate diagrams (matching the two-panel
+"Figure A/B" convention used throughout this package's companion analyses)
+to preserve clear biological interpretation.
 }

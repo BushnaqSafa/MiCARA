@@ -230,28 +230,35 @@ impute_metadata <- function(
 
   class(micara_obj) <- c("micara_imputed", class(micara_obj))
 
-  ## ------------------------------------------------------------------
-  ## 7. Report
-  ## ------------------------------------------------------------------ 
+## ------------------------------------------------------------------
+## 7. Report
+## ------------------------------------------------------------------ 
+
+   if (verbose) {
+     n_logged <- if (!is.null(mice_fit$loggedEvents)) nrow(mice_fit$loggedEvents) else 0
   
-  if (verbose) {
-    n_logged <- if (!is.null(mice_fit$loggedEvents)) nrow(mice_fit$loggedEvents) else 0
-
-    cat("\n========== MiCARA Imputation Report ==========\n")
-    cat("Variables imputed:     ", paste(impute_vars, collapse = ", "), "\n")
-    cat("Auxiliary predictors:  ", paste(auxiliary_predictors, collapse = ", "), "\n")
-    cat("Imputations (m):       ", m, "\n")
-    cat("Dataset used:           #", imputation_index, " of ", m, "\n", sep = "")
-    cat(
-      "Logged events:         ", n_logged,
-      if (n_logged > 0) " (see micara_obj$mice_fit$loggedEvents)" else "", "\n")
-    cat("[MiCARA Tip] Downstream Covariate Selection:\n")
-    cat("  Imputed continuous 'age' is recommended for linear modeling (ANCOM-BC2)\n")
-    cat("   rather than 'age_category' to preserve degrees of freedom.\n")
-    cat("  Use 'age_category' instead if modeling non-linear life-stage thresholds\n")
-    cat("    (e.g., pediatric vs. adult) or if continuous 'age' missingness was high.\n")
-    cat("------------------------------------------------\n")
-  }
-
-  return(micara_obj)
+     cat("\n========== MiCARA Imputation Report ==========\n")
+     cat("Imputation Breakdown:\n")
+     for (v in impute_vars) {
+     n_imp   <- mice_fit$nmis[[v]]
+     pct_imp <- (n_imp / nrow(metadata)) * 100
+     cat(sprintf("  • %-12s : %d / %d samples imputed (%.1f%%)\n", 
+                v, n_imp, nrow(metadata), pct_imp))
+      }
+     cat("------------------------------------------------\n")
+     cat("Auxiliary predictors:  ", paste(auxiliary_predictors, collapse = ", "), "\n")
+     cat("Imputations (m):       ", m, "\n")
+     cat("Dataset used:           #", imputation_index, " of ", m, "\n", sep = "")
+     cat(
+       "Logged events:         ", n_logged,
+       if (n_logged > 0) " (see micara_obj$mice_fit$loggedEvents)" else "", "\n")
+     cat("[MiCARA Tip] Downstream Covariate Selection:\n")
+     cat("  Imputed continuous 'age' is recommended for linear modeling (ANCOM-BC2)\n")
+     cat("   rather than 'age_category' to preserve degrees of freedom.\n")
+     cat("  Use 'age_category' instead if modeling non-linear life-stage thresholds\n")
+     cat("    (e.g., pediatric vs. adult) or if continuous 'age' missingness was high.\n")
+     cat("------------------------------------------------\n")
+   }
+   return(micara_obj)
 }
+

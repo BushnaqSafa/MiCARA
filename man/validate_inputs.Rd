@@ -32,8 +32,7 @@ disease group. Default is 10.}
 \item{metadata_missing_cutoff}{Maximum allowed fraction of missing values
 for an optional covariate. Default is 0.30.}
 
-\item{normalise}{Logical; if TRUE, abundance tables are converted to
-percentage relative abundance. Default TRUE.}
+\item{normalise}{Logical indicating whether feature normalization should be performed. Default is TRUE.}
 
 \item{verbose}{Logical; print a QC summary. Default TRUE.}
 }

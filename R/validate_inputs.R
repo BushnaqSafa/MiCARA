@@ -1,3 +1,4 @@
+
 #' Validate and preprocess MiCARA input tables
 #'
 #' Performs quality control on taxonomic and functional pathway abundance
@@ -13,8 +14,7 @@
 #'   disease group. Default is 10.
 #' @param metadata_missing_cutoff Maximum allowed fraction of missing values
 #'   for an optional covariate. Default is 0.30.
-#' @param normalise Logical; if TRUE, abundance tables are converted to
-#'   percentage relative abundance. Default TRUE.
+#' @param normalise Logical indicating whether feature normalization should be performed. Default is TRUE.
 #' @param verbose Logical; print a QC summary. Default TRUE.
 #'
 #' @return An object of class \code{"micara_input"}.
@@ -32,20 +32,31 @@ validate_inputs <- function(
 ) {
   
   ## ================================================================
-  ## 1. Basic input validation
+  ## 1. Basic input validation (Object type and auto-coercion)
   ## ================================================================
   
-  if (!is.data.frame(taxa)) {
-    stop("'taxa' must be a data.frame.", call. = FALSE)
+  coerce_to_df <- function(x, name) {
+    
+    if (is.matrix(x) ||
+        is.data.frame(x) ||
+        inherits(x, c("DFrame", "DataFrame", "data.table"))) {
+      
+      return(as.data.frame(x, stringsAsFactors = FALSE))
+    }
+    
+    stop(
+      sprintf(
+        "'%s' must be a matrix, data.frame, tibble, or Bioconductor DataFrame (received class: %s)",
+        name,
+        paste(class(x), collapse = ", ")
+      ),
+      call. = FALSE
+    )
   }
   
-  if (!is.data.frame(pathways)) {
-    stop("'pathways' must be a data.frame.", call. = FALSE)
-  }
-  
-  if (!is.data.frame(metadata)) {
-    stop("'metadata' must be a data.frame.", call. = FALSE)
-  }
+  taxa     <- coerce_to_df(taxa, "taxa")
+  pathways <- coerce_to_df(pathways, "pathways")
+  metadata <- coerce_to_df(metadata, "metadata")
   
   if (!is.character(disease_col) || length(disease_col) != 1L) {
     stop("'disease_col' must be a single column name.", call. = FALSE)
@@ -65,6 +76,54 @@ validate_inputs <- function(
       call. = FALSE
     )
   }
+  
+  ## ================================================================
+  ## Universal Metadata Cleaning (Convert common missing-value strings to NA and auto-detect
+  ## numeric columns)
+  ## ================================================================
+  na_strings <- c(
+    "missing: not collected",
+    "not collected",
+    "na",
+    "n/a",
+    "",
+    "unknown",
+    "null",
+    "nan",
+    "none"
+  )
+  
+  metadata[] <- lapply(metadata, function(col) {
+    # 1. Convert string representation of missing values to real R NAs
+    if (is.character(col) || is.factor(col)) {
+      
+      col_char <- trimws(as.character(col))
+      
+      ## Case-insensitive matching
+      col_clean <- tolower(col_char)
+      
+      col_char[col_clean %in% na_strings] <- NA_character_
+      
+      col <- col_char
+    }
+    
+    # 2. Auto-detect if a character column is actually numeric
+    if (is.character(col)) {
+      
+      num_converted <- suppressWarnings(as.numeric(col))
+      
+      ## Convert to numeric only when every non-missing value
+      ## can be converted successfully
+      if (
+        sum(!is.na(col)) > 0 &&
+        sum(!is.na(num_converted)) == sum(!is.na(col))
+      ) {
+        return(num_converted)
+      }
+    }
+    
+    return(col)
+  })
   
   ## ================================================================
   ## 2. Convert feature tables to feature x sample matrices
@@ -360,7 +419,43 @@ validate_inputs <- function(
   }
   
   ## ================================================================
-  ## 6. Optional metadata / confounder assessment
+  ## 6. Remove all-zero taxa or pathways and empty samples
+  ## ================================================================
+  # Step A: Drop features (rows) with 0 total counts across all samples
+  taxa_zero_rows <- rowSums(taxa) == 0
+  if (any(taxa_zero_rows)) {
+    if (verbose) warning(sprintf("Removing %d all-zero taxa feature(s).", sum(taxa_zero_rows)), call. = FALSE)
+    taxa <- taxa[!taxa_zero_rows, , drop = FALSE]
+  }
+  
+  path_zero_rows <- rowSums(pathways) == 0
+  if (any(path_zero_rows)) {
+    if (verbose) warning(sprintf("Removing %d all-zero pathway feature(s).", sum(path_zero_rows)), call. = FALSE)
+    pathways <- pathways[!path_zero_rows, , drop = FALSE]
+  }
+  
+  # Step B: Drop samples (columns) with 0 total sequencing depth
+  min_depth <- 10 # Minimum total reads required per sample
+  
+  valid_samples <- (colSums(taxa) >= min_depth) & (colSums(pathways) >= min_depth)
+  
+  if (any(!valid_samples)) {
+    dropped_ids <- colnames(taxa)[!valid_samples]
+    if (verbose) {
+      warning(sprintf("Removing %d sample(s) with sequencing depth < %d reads: %s", 
+                      sum(!valid_samples), 
+                      min_depth,
+                      paste(dropped_ids, collapse = ", ")), call. = FALSE)
+    }
+    
+    # Step C: Sync matrices and metadata
+    taxa     <- taxa[, valid_samples, drop = FALSE]
+    pathways <- pathways[, valid_samples, drop = FALSE]
+    metadata <- metadata[match(colnames(taxa), metadata$sample_id), , drop = FALSE]
+  }
+
+  ## ================================================================
+  ## 7. Optional metadata / confounder assessment
   ## ================================================================
   
   recognised_covariates <- c(
@@ -427,104 +522,116 @@ validate_inputs <- function(
     ]
   )
   
-  ## ================================================================
-  ## 7. Abundance scale detection
-  ## ================================================================
+  ## Clean continuous covariates (convert string NAs to real NAs and coerce to numeric)
+  for (num_col in c("age", "BMI")) {
+    if (num_col %in% names(metadata)) {
+      vals <- as.character(metadata[[num_col]])
+      vals[vals %in% c("NA", "N/A", "", "Unknown", "unknown", "null")] <- NA
+      metadata[[num_col]] <- suppressWarnings(as.numeric(vals))
+    }
+  }
+  ## ------------------------------------------------------------------
+  ## 8. HELPER: Detect abundance scale
+  ## ------------------------------------------------------------------
   
-  detect_scale <- function(mat, label) {
-    
-    totals <- colSums(mat)
-    
-    if (any(!is.finite(totals)) || any(totals <= 0)) {
-      stop(
-        "'", label,
-        "' contains sample(s) with zero or invalid total abundance.",
-        call. = FALSE
-      )
+  detect_scale <- function(mat) {
+    if (any(mat < 0, na.rm = TRUE)) {
+      return("transformed/log")
     }
     
-    median_total <- median(totals)
+    totals       <- colSums(mat, na.rm = TRUE)
+    median_total <- stats::median(totals, na.rm = TRUE)
+    max_val      <- max(mat, na.rm = TRUE)
     
-    if (abs(median_total - 100) <= 5) {
-      return("percentage")
-    }
-    
-    if (abs(median_total - 1) <= 0.05) {
+    # Proportion: bounded by 1.0 (holds true even after removing unmapped rows)
+    if (max_val <= 1.0 && median_total <= 1.0) {
       return("proportion")
-    }
+    } 
     
-    ## Counts are better identified by integer-like values
-    ## and substantially larger sample totals.
-    if (
-      median_total > 1000 &&
-      all(abs(mat - round(mat)) < 1e-8)
-    ) {
+    # Percentage: values <= 100 with sample totals centered near or below 100
+    if (max_val <= 100 && (abs(median_total - 100) < 15 || max_val > 1)) {
+      return("percentage")
+    } 
+    
+    # Raw counts: large integer abundances
+    if (median_total > 1) {
       return("counts")
     }
     
-    stop(
-      "Unable to determine abundance scale for '", label,
-      "'. Median sample total = ",
-      round(median_total, 4),
-      ". Expected percentage (~100), proportion (~1), ",
-      "or count data (>1000 with integer-like values).",
-      call. = FALSE
-    )
+    stop("Unable to determine abundance scale. Median sample total = ", round(median_total, 2))
   }
   
-  taxa_scale <- detect_scale(taxa, "taxa")
-  pathways_scale <- detect_scale(pathways, "pathways")
+  # Detect scale for both matrices
+  taxa_scale     <- detect_scale(taxa)
+  pathways_scale <- detect_scale(pathways)
   
-  ## ================================================================
-  ## 8. Normalise to percentage scale
-  ## ================================================================
   
-  normalize_to_percentage <- function(mat, scale) {
-    
-    if (scale == "percentage") {
+  ## ------------------------------------------------------------------
+  ## 9. HELPER: Back-calculate raw counts from relative abundance 
+  ## ------------------------------------------------------------------
+  
+  reconstruct_counts <- function(mat, scale, sample_reads) {
+    if (scale == "counts") {
       return(mat)
     }
     
-    if (scale == "proportion") {
-      return(mat * 100)
+    if (is.null(sample_reads) || any(is.na(sample_reads))) {
+      warning("Cannot reconstruct counts: 'number_reads' column is missing or contains NAs in metadata. Proceeding without reconstruction.")
+      return(mat)
     }
     
-    if (scale == "counts") {
-      
-      totals <- colSums(mat)
-      
-      return(
-        sweep(
-          mat,
-          2,
-          totals,
-          FUN = "/"
-        ) * 100
-      )
+    if (scale == "percentage") {
+      prop_mat <- mat / 100
+    } else if (scale == "proportion") {
+      prop_mat <- mat
+    } else {
+      warning("Scale '", scale, "' cannot be automatically converted to counts. Returning original matrix.")
+      return(mat)
     }
+    # Reconstruct counts: proportion * total sample reads, rounded to nearest integer
+    count_mat <- round(sweep(prop_mat, 2, sample_reads, FUN = "*"))
     
-    stop(
-      "Unknown abundance scale: ",
-      scale,
-      call. = FALSE
+    message(
+      "\n[CAVEAT] Back-calculated estimated counts by multiplying relative abundances ",
+      "by metadata$number_reads. Note that these are approximations, and true raw integer ",
+      "counts are always preferred for ANCOM-BC2 models.\n"
     )
+    
+    return(count_mat)
+  } 
+  
+  ## ------------------------------------------------------------------
+  ## 10. VERIFICATION & RECONSTRUCTION PIPELINE
+  ## ------------------------------------------------------------------
+  # Check if total read counts are available and complete
+  has_reads <- "number_reads" %in% names(metadata) && !any(is.na(metadata$number_reads))
+  
+  process_dataset <- function(mat, scale, name) {
+    if (scale %in% c("percentage", "proportion")) {
+      if (has_reads) {
+        warning(
+          "[", name, "] Input is in '", scale, "' scale. ANCOM-BC2 strictly expects raw counts. ",
+          "Back-calculating estimated raw counts using 'metadata$number_reads'.",
+          call. = FALSE
+        )
+        return(reconstruct_counts(mat, scale, metadata$number_reads))
+      } else {
+        warning(
+          "[", name, "] Input is in '", scale, "' scale and 'metadata$number_reads' was not provided. ",
+          "ANCOM-BC2 strictly expects raw counts, but proceeding with relative abundances as requested.",
+          call. = FALSE
+        )
+      }
+    }
+    return(mat)
   }
   
-  if (normalise) {
-    
-    taxa <- normalize_to_percentage(
-      taxa,
-      taxa_scale
-    )
-    
-    pathways <- normalize_to_percentage(
-      pathways,
-      pathways_scale
-    )
-  }
+  taxa     <- process_dataset(taxa, taxa_scale, "taxa")
+  pathways <- process_dataset(pathways, pathways_scale, "pathways")
   
+
   ## ================================================================
-  ## 9. QC report
+  ## 11. QC report
   ## ================================================================
   
   if (verbose) {
@@ -622,7 +729,7 @@ validate_inputs <- function(
   }
   
   ## ================================================================
-  ## 10. Return MiCARA input object
+  ## 12. Return MiCARA input object
   ## ================================================================
   
   structure(
@@ -645,4 +752,3 @@ validate_inputs <- function(
     class = "micara_input"
   )
 }
- 

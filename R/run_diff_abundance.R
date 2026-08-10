@@ -75,20 +75,20 @@
     rand_effect        = "study_name",
     reference_level    = NULL, # Set default to NULL for dynamic matching
     p_adj_method       = "BH",
-    prv_cut            = 0,
+    prv_cut            = 0.10, # Set to 10% prevalence to prevent infinite fitting loops
     alpha              = 0.05,
     pairwise           = FALSE,
     struc_zero         = TRUE,
     neg_lb             = TRUE,
     pseudo_sens        = TRUE,
     use_robust         = TRUE,
-    n_cores            = 1,
+    n_cores            = 1, # Primary argument for cores
     verbose            = TRUE
   ) {
     
     #Auto-detection of reference level terms without throwing an error
     # Detect disease column and unique levels
-    disease_col  <- attr(micara_obj, "disease_col") %||% "disease"
+    disease_col <- if (!is.null(attr(micara_obj, "disease_col"))) attr(micara_obj, "disease_col") else "disease"
     unique_vals  <- unique(na.omit(micara_obj$metadata[[disease_col]]))
     
     # Dynamic auto-detection if reference_level is missing
@@ -241,11 +241,20 @@
     cur_fix_effects <- fix_effects
     if (is.null(cur_fix_effects)) {
       cur_fix_effects <- setdiff(micara_obj$confounders, c("study_name", "disease"))
+      
+      # Automatically prefer continuous 'age' over 'age_category'
+      if ("age" %in% cur_fix_effects && "age_category" %in% cur_fix_effects) {
+        cur_fix_effects <- setdiff(cur_fix_effects, "age_category")
+        if (verbose) {
+          message("[Info] Both 'age' and 'age_category' present. Retaining continuous 'age' and dropping 'age_category' to prevent collinearity.")
+        }
+      }
     }
     
     if (!is.null(exclude_covariates)) {
       cur_fix_effects <- setdiff(cur_fix_effects, exclude_covariates)
     }
+    
     
     ## Validate presence and variance of fixed effect variables and automatically dropping covariates that have zero variance or missing values.
     valid_fix <- character(0)
@@ -305,21 +314,32 @@
       cur_pseudo_sens <- TRUE
     }
     
-    ## Build Phyloseq Object
-    #Combines counts and metadata into a phyloseq object
-    rownames(metadata) <- metadata$sample_id
+    ## ------------------------------------------------------------------
+    ## Build Phyloseq Object (Auto-Detect Sample Orientation)
+    ## ------------------------------------------------------------------
+    rownames(metadata) <- as.character(metadata$sample_id)
     
-    if (!identical(colnames(feature_mat), rownames(metadata))) {
+    if (all(rownames(metadata) %in% rownames(feature_mat))) {
+      # Samples are in ROWS of feature_mat
+      feature_mat <- feature_mat[rownames(metadata), , drop = FALSE]
+      ps <- phyloseq::phyloseq(
+        phyloseq::otu_table(feature_mat, taxa_are_rows = FALSE),
+        phyloseq::sample_data(metadata)
+      )
+    } else if (all(rownames(metadata) %in% colnames(feature_mat))) {
+      # Samples are in COLUMNS of feature_mat
+      feature_mat <- feature_mat[, rownames(metadata), drop = FALSE]
+      ps <- phyloseq::phyloseq(
+        phyloseq::otu_table(feature_mat, taxa_are_rows = TRUE),
+        phyloseq::sample_data(metadata)
+      )
+    } else {
       stop(
-        "Internal alignment error: ", ft, " matrix columns do not match ",
-        "metadata sample IDs. Was micara_obj modified outside MiCARA functions?"
+        "Internal alignment error: ", ft, " matrix sample names do not match ",
+        "metadata sample IDs. Was micara_obj modified outside MiCARA functions?",
+        call. = FALSE
       )
     }
-    
-    ps <- phyloseq::phyloseq(
-      phyloseq::otu_table(feature_mat, taxa_are_rows = TRUE),
-      phyloseq::sample_data(metadata)
-    )
     
     ## Run ANCOM-BC2
     #executes ANCOMBC::ancombc2() with bias correction, prevalence filtering, and sensitivity analysis.
@@ -341,7 +361,7 @@
         fix_formula  = fix_formula,
         rand_formula = cur_rand_formula,
         p_adj_method = p_adj_method,
-        group        = "disease",
+        group        = disease_col,
         prv_cut      = prv_cut,
         pseudo_sens  = cur_pseudo_sens,
         struc_zero   = struc_zero,
