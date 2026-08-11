@@ -137,48 +137,85 @@ validate_inputs <- function(
   ##   rownames = feature names
   ##   columns  = sample IDs
   ## ================================================================
-  
   prepare_abundance_table <- function(df, label) {
     
-    if (ncol(df) < 2L) {
+    if (ncol(df) < 1L) {
       stop(
-        "'", label,
-        "' must contain a feature-name column and at least one sample column.",
+        "'", label, "' must contain at least one sample column.",
         call. = FALSE
       )
     }
     
     ## --------------------------------------------------------------
-    ## First column is treated as the feature-name column when all
-    ## remaining columns are numeric.
+    ## Determine whether feature names are stored in rownames
+    ## or in the first column.
     ## --------------------------------------------------------------
     
-    numeric_remaining <- vapply(
-      df[, -1, drop = FALSE],
-      is.numeric,
-      logical(1)
-    )
+    all_numeric <- all(vapply(df, is.numeric, logical(1)))
     
-    if (!all(numeric_remaining)) {
-      stop(
-        "'", label,
-        "' contains non-numeric sample columns. ",
-        "Expected a feature-name column followed by numeric abundance values.",
-        call. = FALSE
+    has_custom_rownames <-
+      !is.null(rownames(df)) &&
+      length(rownames(df)) == nrow(df) &&
+      all(!is.na(rownames(df))) &&
+      all(rownames(df) != "") &&
+      !identical(rownames(df), as.character(seq_len(nrow(df))))
+    
+    ## ==============================================================
+    ## FORMAT A: Feature names are already stored in rownames
+    ## ==============================================================
+    
+    if (all_numeric && has_custom_rownames) {
+      
+      feature_names <- rownames(df)
+      mat_df <- df
+      
+    } else {
+      
+      ## ============================================================
+      ## FORMAT B: First column contains feature names
+      ## ============================================================
+      
+      if (ncol(df) < 2L) {
+        stop(
+          "'", label,
+          "' must contain a feature-name column and at least one sample column.",
+          call. = FALSE
+        )
+      }
+      
+      feature_names <- as.character(df[[1]])
+      mat_df <- df[, -1, drop = FALSE]
+      
+      ## All abundance columns must be numeric
+      numeric_remaining <- vapply(
+        mat_df,
+        is.numeric,
+        logical(1)
       )
+      
+      if (!all(numeric_remaining)) {
+        stop(
+          "'", label,
+          "' contains non-numeric sample columns. ",
+          "Expected a feature-name column followed by numeric abundance values.",
+          call. = FALSE
+        )
+      }
     }
     
-    feature_names <- as.character(df[[1]])
+    ## --------------------------------------------------------------
+    ## Validate feature names
+    ## --------------------------------------------------------------
     
     if (anyNA(feature_names) || any(feature_names == "")) {
       stop(
-        "'", label,
-        "' contains missing or empty feature names.",
+        "'", label, "' contains missing or empty feature names.",
         call. = FALSE
       )
     }
     
     if (anyDuplicated(feature_names)) {
+      
       duplicated_names <- unique(
         feature_names[duplicated(feature_names)]
       )
@@ -192,29 +229,34 @@ validate_inputs <- function(
       )
     }
     
-    ## Remove feature-name column
-    mat <- df[, -1, drop = FALSE]
+    ## --------------------------------------------------------------
+    ## Convert abundance table to numeric matrix
+    ## --------------------------------------------------------------
     
-    ## Convert to numeric matrix
-    mat <- as.matrix(mat)
+    mat <- as.matrix(mat_df)
     storage.mode(mat) <- "double"
     
     ## Assign feature names
     rownames(mat) <- feature_names
     
-    ## Sample IDs must exist
-    if (is.null(colnames(mat)) ||
-        anyNA(colnames(mat)) ||
-        any(colnames(mat) == "")) {
+    ## --------------------------------------------------------------
+    ## Validate sample IDs
+    ## --------------------------------------------------------------
+    
+    if (
+      is.null(colnames(mat)) ||
+      anyNA(colnames(mat)) ||
+      any(colnames(mat) == "")
+    ) {
       
       stop(
-        "'", label,
-        "' contains missing or empty sample IDs.",
+        "'", label, "' contains missing or empty sample IDs.",
         call. = FALSE
       )
     }
     
     if (anyDuplicated(colnames(mat))) {
+      
       duplicated_ids <- unique(
         colnames(mat)[duplicated(colnames(mat))]
       )
@@ -228,7 +270,10 @@ validate_inputs <- function(
       )
     }
     
-    ## Check values
+    ## --------------------------------------------------------------
+    ## Validate abundance values
+    ## --------------------------------------------------------------
+    
     if (anyNA(mat) || any(!is.finite(mat))) {
       stop(
         "'", label,
@@ -247,9 +292,6 @@ validate_inputs <- function(
     
     mat
   }
-  
-  taxa <- prepare_abundance_table(taxa, "taxa")
-  pathways <- prepare_abundance_table(pathways, "pathways")
   
   ## ================================================================
   ## 3. Sample ID checks
@@ -435,16 +477,15 @@ validate_inputs <- function(
   }
   
   # Step B: Drop samples (columns) with 0 total sequencing depth
-  min_depth <- 10 # Minimum total reads required per sample
   
-  valid_samples <- (colSums(taxa) >= min_depth) & (colSums(pathways) >= min_depth)
+  
+  valid_samples <- (colSums(taxa) > 0) & (colSums(pathways) > 0)
   
   if (any(!valid_samples)) {
     dropped_ids <- colnames(taxa)[!valid_samples]
     if (verbose) {
       warning(sprintf("Removing %d sample(s) with sequencing depth < %d reads: %s", 
                       sum(!valid_samples), 
-                      min_depth,
                       paste(dropped_ids, collapse = ", ")), call. = FALSE)
     }
     

@@ -5,3 +5,5 @@ inst/doc
 .Rproj.user
 .httr-oauth
 .quarto
+*.html
+*.html
