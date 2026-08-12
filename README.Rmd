@@ -6,10 +6,10 @@ output: github_document
 
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>",
-  fig.path = "man/figures/README-",
-  out.width = "100%"
+    collapse = TRUE,
+    comment = "#>",
+    fig.path = "man/figures/README-",
+    out.width = "100%"
 )
 ```
 
@@ -53,10 +53,10 @@ library(MiCARA)
 
 # 1. Validate & filter inputs
 obj <- validate_inputs(
-  taxa_mat = taxa_mat, 
-  pathway_mat = pathway_mat, 
-  metadata = metadata, 
-  disease_col = "disease"
+    taxa_mat = taxa_mat,
+    pathway_mat = pathway_mat,
+    metadata = metadata,
+    disease_col = "disease"
 )
 
 # 2. Impute missing metadata (optional)
@@ -70,7 +70,6 @@ interactions <- compute_residualCLR_correlations(obj, diffab_obj = diff_res)
 
 # 5. Visualize interactions in a Sankey network
 plot_interaction_sankey(interactions, disease = "UC", direction = "both")
-
 ```
 
 

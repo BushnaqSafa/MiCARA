@@ -64,3 +64,50 @@ correlations are rendered as separate diagrams (matching the two-panel
 "Figure A/B" convention used throughout this package's companion analyses)
 to preserve clear biological interpretation.
 }
+\examples{
+set.seed(123)
+sample_ids <- paste0("Sample_", 1:20)
+
+taxa_mat <- matrix(
+    rpois(100, lambda = 50),
+    nrow = 5, ncol = 20,
+    dimnames = list(paste0("Taxon_", 1:5), sample_ids)
+)
+
+path_mat <- matrix(
+    rpois(100, lambda = 100),
+    nrow = 5, ncol = 20,
+    dimnames = list(paste0("Pathway_", 1:5), sample_ids)
+)
+
+meta_df <- data.frame(
+    sample = sample_ids,
+    disease = rep(c("Control", "Disease"), each = 10),
+    age = rnorm(20, mean = 40, sd = 5),
+    row.names = sample_ids
+)
+
+validated_obj <- validate_inputs(
+    taxa = taxa_mat,
+    pathways = path_mat,
+    metadata = meta_df,
+    disease_col = "disease",
+    disease_min_samples = 5,
+    verbose = FALSE
+)
+
+corr_res <- compute_residualCLR_correlations(
+    micara_obj = validated_obj,
+    covariates = "age",
+    min_samples_per_disease = 5L,
+    verbose = FALSE
+)
+
+# Plot Sankey flow diagram for interactions
+plot_interaction_sankey(
+    interactions = corr_res,
+    disease = "Disease",
+    direction = "both"
+)
+
+}

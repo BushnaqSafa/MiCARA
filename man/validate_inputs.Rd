@@ -43,3 +43,36 @@ An object of class \code{"micara_input"}.
 Performs quality control on taxonomic and functional pathway abundance
 tables and accompanying sample metadata.
 }
+\examples{
+# Set up minimal synthetic inputs
+set.seed(123)
+sample_ids <- paste0("Sample_", 1:20)
+
+taxa_mat <- matrix(
+    runif(100, min = 0, max = 1000),
+    nrow = 5, ncol = 20,
+    dimnames = list(paste0("Taxon_", 1:5), sample_ids)
+)
+
+path_mat <- matrix(
+    runif(100, min = 0, max = 500),
+    nrow = 5, ncol = 20,
+    dimnames = list(paste0("Pathway_", 1:5), sample_ids)
+)
+
+meta_df <- data.frame(
+    sample = sample_ids,
+    disease = rep(c("Control", "Disease"), each = 10),
+    row.names = sample_ids
+)
+
+# Validate inputs
+validated_data <- validate_inputs(
+    taxa = taxa_mat,
+    pathways = path_mat,
+    metadata = meta_df,
+    disease_col = "disease",
+    disease_min_samples = 5,
+    verbose = FALSE
+)
+}

@@ -114,3 +114,44 @@ CLR is calculated on the full feature set before disease-specific feature
 selection. Canonical taxon and pathway identifiers are preserved; labels
 should be cleaned only in downstream plotting functions.
 }
+\examples{
+set.seed(123)
+sample_ids <- paste0("Sample_", 1:20)
+
+taxa_mat <- matrix(
+    rpois(100, lambda = 50),
+    nrow = 5, ncol = 20,
+    dimnames = list(paste0("Taxon_", 1:5), sample_ids)
+)
+
+path_mat <- matrix(
+    rpois(100, lambda = 100),
+    nrow = 5, ncol = 20,
+    dimnames = list(paste0("Pathway_", 1:5), sample_ids)
+)
+
+meta_df <- data.frame(
+    sample = sample_ids,
+    disease = rep(c("Control", "Disease"), each = 10),
+    age = rnorm(20, mean = 40, sd = 5),
+    row.names = sample_ids
+)
+
+validated_obj <- validate_inputs(
+    taxa = taxa_mat,
+    pathways = path_mat,
+    metadata = meta_df,
+    disease_col = "disease",
+    disease_min_samples = 5,
+    verbose = FALSE
+)
+
+# Compute residual CLR correlations adjusting for covariates
+corr_res <- compute_residualCLR_correlations(
+    micara_obj = validated_obj,
+    covariates = "age",
+    min_samples_per_disease = 5L,
+    verbose = FALSE
+)
+
+}

@@ -7,3 +7,5 @@ inst/doc
 .quarto
 *.html
 *.html
+
+docs/

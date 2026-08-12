@@ -19,7 +19,7 @@ A data frame with 30 rows and 6 columns:
 Simulated synthetic data for MiCARA testing and demonstration.
 }
 \usage{
-example_metadata
+data(example_metadata)
 }
 \description{
 A simulated metadata data frame containing sample covariates and disease status.

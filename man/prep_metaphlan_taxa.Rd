@@ -17,3 +17,17 @@ Cleaned taxonomic matrix with standardized species names.
 \description{
 Clean MetaPhlAn Taxonomic Names
 }
+\examples{
+dummy_taxa <- matrix(
+    c(10.5, 89.5, 20.0, 80.0),
+    nrow = 2, ncol = 2,
+    dimnames = list(
+        c(
+            "k__Bacteria|s__Staphylococcus_aureus",
+            "k__Bacteria|s__Bacteroides_fragilis"
+        ),
+        c("Sample1", "Sample2")
+    )
+)
+prep_metaphlan_taxa(dummy_taxa, rank = "species")
+}

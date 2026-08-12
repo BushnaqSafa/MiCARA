@@ -11,7 +11,7 @@ A numeric matrix with 10 rows (pathways) and 30 columns (samples).
 Simulated synthetic data for MiCARA testing and demonstration.
 }
 \usage{
-example_pathways
+data(example_pathways)
 }
 \description{
 A simulated count matrix representing functional pathway abundances across samples.
