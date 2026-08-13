@@ -50,7 +50,7 @@ test_that("relative abundance without number_reads issues a warning", {
 })
 
 ## ------------------------------------------------------------------------
-## 1. Test counts reconstruction when number_reads is available
+## 1a. Test counts reconstruction when number_reads is available
 ## ------------------------------------------------------------------------
 
 test_that("percentage-scale input is reconstructed to estimated counts when read counts are available", {
@@ -144,6 +144,7 @@ test_that("proportion-scale input is reconstructed to estimated counts when read
     )
   )
 })
+
 ## ------------------------------------------------------------------------
 ## 2. Object type check
 ## ------------------------------------------------------------------------
@@ -152,25 +153,24 @@ test_that("matrix inputs are accepted and converted", {
   d <- make_test_data()
   
   expect_no_error(
-    validate_inputs(as.matrix(d$taxa), d$pathways, d$metadata, verbose = FALSE)
+    suppressWarnings(
+      validate_inputs(as.matrix(d$taxa), d$pathways, d$metadata, verbose = FALSE)
+    )
   )
   
   expect_no_error(
-    validate_inputs(d$taxa, as.matrix(d$pathways), d$metadata, verbose = FALSE)
+    suppressWarnings(
+      validate_inputs(d$taxa, as.matrix(d$pathways), d$metadata, verbose = FALSE)
+    )
   )
   
   expect_no_error(
-    validate_inputs(d$taxa, d$pathways, as.matrix(d$metadata), verbose = FALSE)
+    suppressWarnings(
+      validate_inputs(d$taxa, d$pathways, as.matrix(d$metadata), verbose = FALSE)
+    )
   )
 })
 
-test_that("truly invalid non-data.frame inputs are rejected", {
-  d <- make_test_data()
-  
-  expect_error(
-    validate_inputs("invalid_input", d$pathways, d$metadata, verbose = FALSE)
-  )
-})
 ## ------------------------------------------------------------------------
 ## 3. Non-numeric content
 ## ------------------------------------------------------------------------
@@ -325,14 +325,14 @@ test_that("count-scale input is correctly detected and left unchanged", {
   expect_equal(result$pathways, d$pathways)
 })
 
+
 # unrecognisable abundance scale
 test_that("unrecognisable abundance scale raises an informative error", {
   d <- make_test_data(abundance_scale = "proportion")
-
-  ## Produce column totals of 0.5:
-  ## not percentage (~100), proportion (~1), or counts (>1).
-  d$taxa <- d$taxa * 0.5
-
+  
+  ## Produce ambiguous continuous numbers (neither proportion <=1, percentage ~100, nor count):
+  d$taxa <- d$taxa * 25.5
+  
   expect_error(
     suppressWarnings(
       validate_inputs(

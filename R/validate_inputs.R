@@ -25,11 +25,12 @@ clean_shotgun_input <- function(df) {
       df <- df[!unwanted, , drop = FALSE]
       col_vals <- as.character(df[[1]])
     }
-
     # Filter out stratified pathways if raw HUMAnN
-    if (any(grepl("\\|", col_vals) & grepl("PWY|PATHWAY|UNMAPPED", col_vals, ignore.case = TRUE))) {
-      stratified <- grepl("\\|", col_vals)
-      df <- df[!stratified, , drop = FALSE]
+    is_stratified <- grepl("\\|", col_vals) & 
+      grepl("PWY|PATHWAY|UNMAPPED", col_vals, ignore.case = TRUE)
+    
+    if (any(is_stratified)) {
+      df <- df[!is_stratified, , drop = FALSE]
       col_vals <- as.character(df[[1]])
     }
 
@@ -103,16 +104,11 @@ validate_inputs <- function(
   verbose = TRUE
 ) {
   
-  # Auto-convert matrices to data.frames for flexibility
-  if (is.matrix(taxa)) {
-    taxa <- as.data.frame(taxa)
-  }
-  if (is.matrix(pathways)) {
-    pathways <- as.data.frame(pathways)
-  }
-  if (is.matrix(metadata)) {
-    metadata <- as.data.frame(metadata)
-  }
+  # Auto-convert matrices, S4 DataFrames, and matrix-like objects to data.frame
+  taxa     <- tryCatch(as.data.frame(taxa),     error = function(e) taxa)
+  pathways <- tryCatch(as.data.frame(pathways), error = function(e) pathways)
+  metadata <- tryCatch(as.data.frame(metadata), error = function(e) metadata)
+  
   ## ================================================================
   ## 1. Strict Input Type Enforcement
   ## ================================================================
@@ -153,7 +149,16 @@ validate_inputs <- function(
       metadata$number_reads <- metadata[[actual_col]]
     }
   }
-
+  
+  # Auto-populate sample_id from rownames if the column is missing
+  if (!"sample_id" %in% colnames(metadata)) {
+    if (!is.null(rownames(metadata)) && !all(rownames(metadata) == as.character(seq_len(nrow(metadata))))) {
+      metadata$sample_id <- rownames(metadata)
+    } else {
+      stop("Metadata must contain a 'sample_id' column or valid sample row names.", call. = FALSE)
+    }
+  }
+  
   if (!"sample_id" %in% names(metadata)) {
     stop("Metadata must contain a column named 'sample_id'.", call. = FALSE)
   }
@@ -349,27 +354,49 @@ validate_inputs <- function(
   ## 8. Abundance Scale Detection & Re-construction
   ## ================================================================
   detect_scale <- function(mat) {
+    if (is.data.frame(mat)) {
+      num_cols <- vapply(mat, is.numeric, logical(1))
+      mat <- as.matrix(mat[, num_cols, drop = FALSE])
+    } else {
+      mat <- as.matrix(mat)
+    }
+    
+    if (length(mat) == 0) {
+      stop("Unrecognised abundance scale. Unable to determine scale.", call. = FALSE)
+    }
+    
+    # 1. Negative values -> log/transformed
     if (any(mat < 0, na.rm = TRUE)) {
       return("transformed/log")
     }
-    totals <- colSums(mat, na.rm = TRUE)
-    median_total <- stats::median(totals, na.rm = TRUE)
-    max_val <- max(mat, na.rm = TRUE)
+    
+    # 2. Integer counts
     is_integer_like <- all(abs(mat - round(mat)) < 1e-5, na.rm = TRUE)
-
-    if (max_val <= 1.05 && abs(median_total - 1) <= 0.15) {
-      return("proportion")
-    }
-    if (max_val <= 100.05 && abs(median_total - 100) <= 5) {
-      return("percentage")
-    }
     if (is_integer_like) {
       return("counts")
     }
-
+    
+    totals <- colSums(mat, na.rm = TRUE)
+    median_total <- stats::median(totals, na.rm = TRUE)
+    max_val <- max(mat, na.rm = TRUE)
+    max_total <- max(totals, na.rm = TRUE)
+    
+    # 3. Proportion scale (0 to 1)
+    # Max value <= 1.05 & max total <= 1.05 (handles filtered pathways smoothly)
+    if (max_val <= 1.05 && max_total <= 1.05) {
+      return("proportion")
+    }
+    
+    # 4. Percentage scale (0 to 100)
+    # Max value <= 100.05 & sample sums average ~100
+    if (max_val <= 100.05 && abs(median_total - 100) <= 10) {
+      return("percentage")
+    }
+    
+    # 5. Fallback: Throw informative error for ambiguous continuous scale
     stop("Unrecognised abundance scale. Unable to determine scale.", call. = FALSE)
   }
-
+  
   taxa_scale <- detect_scale(taxa)
   pathways_scale <- detect_scale(pathways)
 

@@ -8,10 +8,16 @@ export(prep_metaphlan_taxa)
 export(run_diff_abundance)
 export(validate_inputs)
 importFrom(ANCOMBC,ancombc2)
-importFrom(phyloseq,otu_table)
-importFrom(phyloseq,phyloseq)
-importFrom(phyloseq,sample_data)
-importFrom(stats,na.omit)
-importFrom(stats,relevel)
-importFrom(utils,head)
-importFrom(utils,tail)
+importFrom(phyloseq,
+  otu_table,
+  phyloseq,
+  sample_data
+)
+importFrom(stats,
+  na.omit,
+  relevel
+)
+importFrom(utils,
+  head,
+  tail
+)

@@ -231,20 +231,27 @@ plot_interaction_sankey <- function(
 
       has_webshot2 <- requireNamespace("webshot2", quietly = TRUE)
       has_webshot <- requireNamespace("webshot", quietly = TRUE)
-
-      if (has_webshot2) {
-        webshot2::webshot(html_path, paste0(out_prefix, ".png"))
-      } else if (has_webshot) {
-        webshot::webshot(html_path, paste0(out_prefix, ".png"), delay = 2)
-      } else {
+      
+      tryCatch({
+        if (has_webshot2) {
+          webshot2::webshot(html_path, paste0(out_prefix, ".png"))
+        } else if (has_webshot) {
+          webshot::webshot(html_path, paste0(out_prefix, ".png"), delay = 2)
+        } else {
+          warning(
+            "Neither 'webshot2' nor 'webshot' is installed; only the .html file was saved.",
+            call. = FALSE
+          )
+        }
+      }, error = function(e) {
         warning(
-          "Neither 'webshot2' nor 'webshot' is installed; only the .html file was saved.",
+          "Failed to export static PNG image (headless browser unavailable): ", e$message,
+          "\nNote: The interactive .html file was saved successfully.",
           call. = FALSE
         )
-      }
-    }
-
-    return(widget)
+       })
+    } 
+    return(widget) 
   }
 
   ## ------------------------------------------------------------------
