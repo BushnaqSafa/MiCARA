@@ -109,39 +109,39 @@ sample_ids <- paste0("Sample_", 1:20)
 
 # Create count matrices required for differential abundance modeling
 taxa_mat <- as.data.frame(matrix(
-  rpois(100, lambda = 50),
-  nrow = 5, ncol = 20,
-  dimnames = list(paste0("Taxon_", 1:5), sample_ids)
+    rpois(100, lambda = 50),
+    nrow = 5, ncol = 20,
+    dimnames = list(paste0("Taxon_", 1:5), sample_ids)
 ))
 
 path_mat <- as.data.frame(matrix(
-  rpois(100, lambda = 100),
-  nrow = 5, ncol = 20,
-  dimnames = list(paste0("Pathway_", 1:5), sample_ids)
+    rpois(100, lambda = 100),
+    nrow = 5, ncol = 20,
+    dimnames = list(paste0("Pathway_", 1:5), sample_ids)
 ))
 
 meta_df <- data.frame(
-  sample_id = sample_ids,
-  disease = rep(c("Control", "Disease"), each = 10),
-  study_name = rep(c("Study1", "Study2"), each = 10),
-  row.names = sample_ids
+    sample_id = sample_ids,
+    disease = rep(c("Control", "Disease"), each = 10),
+    study_name = rep(c("Study1", "Study2"), each = 10),
+    row.names = sample_ids
 )
 
 validated_obj <- validate_inputs(
-  taxa = taxa_mat,
-  pathways = path_mat,
-  metadata = meta_df,
-  disease_col = "disease",
-  disease_min_samples = 5,
-  verbose = FALSE
+    taxa = taxa_mat,
+    pathways = path_mat,
+    metadata = meta_df,
+    disease_col = "disease",
+    disease_min_samples = 5,
+    verbose = FALSE
 )
 
 # Run differential abundance analysis (set n_cores = 1 for CRAN/Bioc compliance)
 diff_res <- run_diff_abundance(
-  micara_obj = validated_obj,
-  feature_type = "taxa",
-  rand_effect = NULL,
-  n_cores = 1,
-  verbose = FALSE
+    micara_obj = validated_obj,
+    feature_type = "taxa",
+    rand_effect = NULL,
+    n_cores = 1,
+    verbose = FALSE
 )
 }

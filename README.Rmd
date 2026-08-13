@@ -6,10 +6,10 @@ output: github_document
 
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>",
-  fig.path = "man/figures/README-",
-  out.width = "100%"
+    collapse = TRUE,
+    comment = "#>",
+    fig.path = "man/figures/README-",
+    out.width = "100%"
 )
 ```
 
@@ -38,7 +38,7 @@ You can install `MiCARA` directly from GitHub using `pak`:
 ``` {r installation, eval = FALSE}
 # Install pak if not already available
 if (!requireNamespace("pak", quietly = TRUE)) {
-  install.packages("pak")
+    install.packages("pak")
 }
 
 # Install MiCARA
@@ -53,10 +53,10 @@ library(MiCARA)
 
 # 1. Validate & filter inputs
 obj <- validate_inputs(
-  taxa_mat = taxa_mat,
-  pathway_mat = pathway_mat,
-  metadata = metadata,
-  disease_col = "disease"
+    taxa_mat = taxa_mat,
+    pathway_mat = pathway_mat,
+    metadata = metadata,
+    disease_col = "disease"
 )
 
 # 2. Impute missing metadata (optional)

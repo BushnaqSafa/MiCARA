@@ -8,8 +8,8 @@ vignette: >
 ---
 ```{r init, include = FALSE}
 knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>"
+    collapse = TRUE,
+    comment = "#>"
 )
 ```
 
@@ -33,10 +33,10 @@ data("example_metadata", package = "MiCARA")
 
 # Validate inputs and filter unusable covariates
 micara_obj <- validate_inputs(
-  taxa = example_taxa,
-  pathways = example_pathways,
-  metadata = example_metadata,
-  disease_col = "disease"
+    taxa = example_taxa,
+    pathways = example_pathways,
+    metadata = example_metadata,
+    disease_col = "disease"
 )
 ```
 
@@ -66,10 +66,10 @@ micara_obj <- impute_metadata(micara_obj)
 ```{r diff-step, eval = TRUE}
 # Run differential abundance on both feature types
 diff_results <- run_diff_abundance(
-  micara_obj      = micara_obj,
-  feature_type    = c("taxa", "pathways"),
-  reference_level = "healthy",
-  use_robust      = TRUE
+    micara_obj      = micara_obj,
+    feature_type    = c("taxa", "pathways"),
+    reference_level = "healthy",
+    use_robust      = TRUE
 )
 
 # Inspect significant taxa
@@ -89,12 +89,12 @@ After identifying robust differentially abundant features, compute_residual_corr
 ```{r interactions, eval = TRUE}
 # Compute residual correlations per disease
 interactions <- compute_residualCLR_correlations(
-  micara_obj   = micara_obj,
-  diffab_obj   = diff_results,
-  covariates   = c("age_category", "BMI", "gender", "study_name"),
-  q_cutoff     = 0.05,
-  r_cutoff     = 0.20,
-  verbose      = TRUE
+    micara_obj   = micara_obj,
+    diffab_obj   = diff_results,
+    covariates   = c("age_category", "BMI", "gender", "study_name"),
+    q_cutoff     = 0.05,
+    r_cutoff     = 0.20,
+    verbose      = TRUE
 )
 
 # inspect available disease cohorts in the output list
@@ -112,9 +112,9 @@ attr(interactions, "settings")
 analyzed_cohorts <- names(interactions)[sapply(interactions, function(x) is.list(x) && x$status == "analysed")]
 
 if (length(analyzed_cohorts) > 0) {
-  first_cohort <- analyzed_cohorts[1]
-  message("Displaying links for cohort: ", first_cohort)
-  head(interactions[[first_cohort]]$links)
+    first_cohort <- analyzed_cohorts[1]
+    message("Displaying links for cohort: ", first_cohort)
+    head(interactions[[first_cohort]]$links)
 }
 ```
 ### Step 5: Visualize Taxa-Pathway Interactions
@@ -124,12 +124,12 @@ Use `plot_interaction_sankey()` to display interactive D3 networks connecting si
 ```{r plot-sankey, eval=FALSE}
 # Interactive visualization
 plot_interaction_sankey(
-  interactions      = interactions,
-  disease           = names(interactions)[1], # Target disease cohort (e.g., "UC")
-  direction         = "both", # Options: "positive", "negative", or "both"
-  top_n_per_pathway = 5, # Top N correlated taxa per pathway
-  font_size         = 12, # Text label size in pixels
-  node_width        = 35 # Width of Sankey block nodes
+    interactions      = interactions,
+    disease           = names(interactions)[1], # Target disease cohort (e.g., "UC")
+    direction         = "both", # Options: "positive", "negative", or "both"
+    top_n_per_pathway = 5, # Top N correlated taxa per pathway
+    font_size         = 12, # Text label size in pixels
+    node_width        = 35 # Width of Sankey block nodes
 )
 
 # Optional: Save interactive HTML and static PNG exports
@@ -137,9 +137,9 @@ plot_interaction_sankey(
 dir.create("results", showWarnings = FALSE, recursive = TRUE)
 
 plot_interaction_sankey(
-  interactions      = interactions,
-  disease           = names(interactions)[1],
-  save_path         = "results/sankey_network"
+    interactions      = interactions,
+    disease           = names(interactions)[1],
+    save_path         = "results/sankey_network"
 )
 ```
 

@@ -1,264 +1,264 @@
 # Helper to create lightweight mock micara_interactions objects for testing
 make_mock_sankey_interactions <- function() {
-  # DiseaseA has mixed positive and negative links
-  links_a <- data.frame(
-    taxon = c("Taxon_1", "Taxon_2", "Taxon_3", "Taxon_4"),
-    pathway = c("Pathway_1", "Pathway_1", "Pathway_2", "Pathway_2"),
-    rho = c(0.45, -0.35, 0.60, -0.25),
-    p = c(0.001, 0.01, 0.0005, 0.02),
-    q = c(0.005, 0.02, 0.002, 0.04),
-    direction = c("positive", "negative", "positive", "negative"),
-    stringsAsFactors = FALSE
-  )
+    # DiseaseA has mixed positive and negative links
+    links_a <- data.frame(
+        taxon = c("Taxon_1", "Taxon_2", "Taxon_3", "Taxon_4"),
+        pathway = c("Pathway_1", "Pathway_1", "Pathway_2", "Pathway_2"),
+        rho = c(0.45, -0.35, 0.60, -0.25),
+        p = c(0.001, 0.01, 0.0005, 0.02),
+        q = c(0.005, 0.02, 0.002, 0.04),
+        direction = c("positive", "negative", "positive", "negative"),
+        stringsAsFactors = FALSE
+    )
 
-  node_directions_a <- data.frame(
-    name = c("Taxon_1", "Taxon_2", "Taxon_3", "Taxon_4", "Pathway_1", "Pathway_2"),
-    type = c(rep("Taxon", 4), rep("Pathway", 2)),
-    group = c("up", "down", "up", "down", "up", "unchanged"),
-    stringsAsFactors = FALSE
-  )
+    node_directions_a <- data.frame(
+        name = c("Taxon_1", "Taxon_2", "Taxon_3", "Taxon_4", "Pathway_1", "Pathway_2"),
+        type = c(rep("Taxon", 4), rep("Pathway", 2)),
+        group = c("up", "down", "up", "down", "up", "unchanged"),
+        stringsAsFactors = FALSE
+    )
 
-  disease_a <- list(
-    status = "analysed",
-    links = links_a,
-    node_directions = node_directions_a
-  )
+    disease_a <- list(
+        status = "analysed",
+        links = links_a,
+        node_directions = node_directions_a
+    )
 
-  # DiseaseB has ONLY positive links
-  links_b <- data.frame(
-    taxon = c("Taxon_1", "Taxon_2"),
-    pathway = c("Pathway_1", "Pathway_1"),
-    rho = c(0.50, 0.40),
-    p = c(0.001, 0.005),
-    q = c(0.01, 0.02),
-    direction = c("positive", "positive"),
-    stringsAsFactors = FALSE
-  )
+    # DiseaseB has ONLY positive links
+    links_b <- data.frame(
+        taxon = c("Taxon_1", "Taxon_2"),
+        pathway = c("Pathway_1", "Pathway_1"),
+        rho = c(0.50, 0.40),
+        p = c(0.001, 0.005),
+        q = c(0.01, 0.02),
+        direction = c("positive", "positive"),
+        stringsAsFactors = FALSE
+    )
 
-  node_directions_b <- data.frame(
-    name = c("Taxon_1", "Taxon_2", "Pathway_1"),
-    type = c("Taxon", "Taxon", "Pathway"),
-    group = c("up", "up", "down"),
-    stringsAsFactors = FALSE
-  )
+    node_directions_b <- data.frame(
+        name = c("Taxon_1", "Taxon_2", "Pathway_1"),
+        type = c("Taxon", "Taxon", "Pathway"),
+        group = c("up", "up", "down"),
+        stringsAsFactors = FALSE
+    )
 
-  disease_b <- list(
-    status = "analysed",
-    links = links_b,
-    node_directions = node_directions_b
-  )
+    disease_b <- list(
+        status = "analysed",
+        links = links_b,
+        node_directions = node_directions_b
+    )
 
-  # DiseaseEmpty has 0 links passing thresholds
-  disease_empty <- list(
-    status = "skipped",
-    links = links_a[0, ],
-    node_directions = node_directions_a[0, ]
-  )
+    # DiseaseEmpty has 0 links passing thresholds
+    disease_empty <- list(
+        status = "skipped",
+        links = links_a[0, ],
+        node_directions = node_directions_a[0, ]
+    )
 
-  res <- list(
-    DiseaseA = disease_a,
-    Disease.Sanitized = disease_b,
-    DiseaseEmpty = disease_empty
-  )
+    res <- list(
+        DiseaseA = disease_a,
+        Disease.Sanitized = disease_b,
+        DiseaseEmpty = disease_empty
+    )
 
-  class(res) <- c("micara_interactions", "list")
-  res
+    class(res) <- c("micara_interactions", "list")
+    res
 }
 
 test_that(".to_js_array creates valid JavaScript array strings", {
-  js_str <- MiCARA:::.to_js_array(c("up", "down", "unchanged"))
-  expect_equal(js_str, "[\"up\", \"down\", \"unchanged\"]")
+    js_str <- MiCARA:::.to_js_array(c("up", "down", "unchanged"))
+    expect_equal(js_str, "[\"up\", \"down\", \"unchanged\"]")
 })
 
 test_that("plot_interaction_sankey validates input object class and parameters", {
-  skip_if_not_installed("networkD3")
-  interactions <- make_mock_sankey_interactions()
+    skip_if_not_installed("networkD3")
+    interactions <- make_mock_sankey_interactions()
 
-  # Invalid S3 class
-  expect_error(
-    plot_interaction_sankey(list(), disease = "DiseaseA"),
-    "'interactions' must be the output of compute_residualCLR_correlations"
-  )
+    # Invalid S3 class
+    expect_error(
+        plot_interaction_sankey(list(), disease = "DiseaseA"),
+        "'interactions' must be the output of compute_residualCLR_correlations"
+    )
 
-  # Invalid disease inputs (non-scalar / empty / NA)
-  expect_error(
-    plot_interaction_sankey(interactions, disease = c("DiseaseA", "DiseaseB")),
-    "'disease' must be a single non-empty character string"
-  )
-  expect_error(
-    plot_interaction_sankey(interactions, disease = NA_character_),
-    "'disease' must be a single non-empty character string"
-  )
+    # Invalid disease inputs (non-scalar / empty / NA)
+    expect_error(
+        plot_interaction_sankey(interactions, disease = c("DiseaseA", "DiseaseB")),
+        "'disease' must be a single non-empty character string"
+    )
+    expect_error(
+        plot_interaction_sankey(interactions, disease = NA_character_),
+        "'disease' must be a single non-empty character string"
+    )
 
-  # Invalid direction parameter (match.arg handling)
-  expect_error(
-    plot_interaction_sankey(interactions, disease = "DiseaseA", direction = "invalid_dir")
-  )
+    # Invalid direction parameter (match.arg handling)
+    expect_error(
+        plot_interaction_sankey(interactions, disease = "DiseaseA", direction = "invalid_dir")
+    )
 
-  # Disease not present in interactions object
-  expect_error(
-    plot_interaction_sankey(interactions, disease = "NonExistentDisease"),
-    "'NonExistentDisease' not found in interactions. Available diseases: DiseaseA, Disease.Sanitized, DiseaseEmpty"
-  )
+    # Disease not present in interactions object
+    expect_error(
+        plot_interaction_sankey(interactions, disease = "NonExistentDisease"),
+        "'NonExistentDisease' not found in interactions. Available diseases: DiseaseA, Disease.Sanitized, DiseaseEmpty"
+    )
 
-  # Unnamed node_colors vector
-  expect_error(
-    plot_interaction_sankey(interactions, disease = "DiseaseA", node_colors = c("#2196F3", "#F44336")),
-    "'node_colors' must be a named vector"
-  )
+    # Unnamed node_colors vector
+    expect_error(
+        plot_interaction_sankey(interactions, disease = "DiseaseA", node_colors = c("#2196F3", "#F44336")),
+        "'node_colors' must be a named vector"
+    )
 
-  # Invalid top_n_per_pathway parameter
-  expect_error(
-    plot_interaction_sankey(interactions, disease = "DiseaseA", top_n_per_pathway = 0),
-    "'top_n_per_pathway' must be a positive integer"
-  )
+    # Invalid top_n_per_pathway parameter
+    expect_error(
+        plot_interaction_sankey(interactions, disease = "DiseaseA", top_n_per_pathway = 0),
+        "'top_n_per_pathway' must be a positive integer"
+    )
 })
 
 test_that("plot_interaction_sankey handles empty link tables and missing directions", {
-  skip_if_not_installed("networkD3")
-  interactions <- make_mock_sankey_interactions()
+    skip_if_not_installed("networkD3")
+    interactions <- make_mock_sankey_interactions()
 
-  # Disease has zero total links
-  expect_error(
-    plot_interaction_sankey(interactions, disease = "DiseaseEmpty"),
-    "DiseaseEmpty has no links passing the significance/strength cutoffs; nothing to plot."
-  )
+    # Disease has zero total links
+    expect_error(
+        plot_interaction_sankey(interactions, disease = "DiseaseEmpty"),
+        "DiseaseEmpty has no links passing the significance/strength cutoffs; nothing to plot."
+    )
 
-  # Disease has no negative links when explicitly requested
-  expect_error(
-    plot_interaction_sankey(interactions, disease = "Disease.Sanitized", direction = "negative"),
-    "Disease.Sanitized has no negative links passing the cutoffs; nothing to plot."
-  )
+    # Disease has no negative links when explicitly requested
+    expect_error(
+        plot_interaction_sankey(interactions, disease = "Disease.Sanitized", direction = "negative"),
+        "Disease.Sanitized has no negative links passing the cutoffs; nothing to plot."
+    )
 })
 
 test_that("plot_interaction_sankey resolves non-syntactic or sanitized disease names", {
-  skip_if_not_installed("networkD3")
-  interactions <- make_mock_sankey_interactions()
+    skip_if_not_installed("networkD3")
+    interactions <- make_mock_sankey_interactions()
 
-  # Requesting "Disease-Sanitized" resolves to "Disease.Sanitized" (returns list containing positive widget)
-  res <- plot_interaction_sankey(interactions, disease = "Disease-Sanitized", direction = "both")
-  expect_type(res, "list")
-  expect_s3_class(res$positive, "sankeyNetwork")
-  expect_s3_class(res$positive, "htmlwidget")
+    # Requesting "Disease-Sanitized" resolves to "Disease.Sanitized" (returns list containing positive widget)
+    res <- plot_interaction_sankey(interactions, disease = "Disease-Sanitized", direction = "both")
+    expect_type(res, "list")
+    expect_s3_class(res$positive, "sankeyNetwork")
+    expect_s3_class(res$positive, "htmlwidget")
 })
 
 test_that("plot_interaction_sankey filters by direction accurately", {
-  skip_if_not_installed("networkD3")
-  interactions <- make_mock_sankey_interactions()
+    skip_if_not_installed("networkD3")
+    interactions <- make_mock_sankey_interactions()
 
-  # Both directions (default) returns a list with positive and negative widgets
-  widgets_both <- plot_interaction_sankey(interactions, disease = "DiseaseA", direction = "both")
-  expect_type(widgets_both, "list")
-  expect_named(widgets_both, c("positive", "negative"), ignore.order = TRUE)
-  expect_equal(nrow(widgets_both$positive$x$links), 2)
-  expect_equal(nrow(widgets_both$negative$x$links), 2)
+    # Both directions (default) returns a list with positive and negative widgets
+    widgets_both <- plot_interaction_sankey(interactions, disease = "DiseaseA", direction = "both")
+    expect_type(widgets_both, "list")
+    expect_named(widgets_both, c("positive", "negative"), ignore.order = TRUE)
+    expect_equal(nrow(widgets_both$positive$x$links), 2)
+    expect_equal(nrow(widgets_both$negative$x$links), 2)
 
-  # Positive direction only returns a single htmlwidget
-  widget_pos <- plot_interaction_sankey(interactions, disease = "DiseaseA", direction = "positive")
-  expect_s3_class(widget_pos, "sankeyNetwork")
-  expect_equal(nrow(widget_pos$x$links), 2)
+    # Positive direction only returns a single htmlwidget
+    widget_pos <- plot_interaction_sankey(interactions, disease = "DiseaseA", direction = "positive")
+    expect_s3_class(widget_pos, "sankeyNetwork")
+    expect_equal(nrow(widget_pos$x$links), 2)
 
-  # Negative direction only returns a single htmlwidget
-  widget_neg <- plot_interaction_sankey(interactions, disease = "DiseaseA", direction = "negative")
-  expect_s3_class(widget_neg, "sankeyNetwork")
-  expect_equal(nrow(widget_neg$x$links), 2)
+    # Negative direction only returns a single htmlwidget
+    widget_neg <- plot_interaction_sankey(interactions, disease = "DiseaseA", direction = "negative")
+    expect_s3_class(widget_neg, "sankeyNetwork")
+    expect_equal(nrow(widget_neg$x$links), 2)
 })
 
 test_that("plot_interaction_sankey trims links using top_n_per_pathway", {
-  skip_if_not_installed("networkD3")
-  interactions <- make_mock_sankey_interactions()
+    skip_if_not_installed("networkD3")
+    interactions <- make_mock_sankey_interactions()
 
-  # Top 1 per pathway across split sankey (1 positive, 1 negative = 2 total across list)
-  widgets_top1 <- plot_interaction_sankey(
-    interactions,
-    disease = "DiseaseA",
-    direction = "both",
-    top_n_per_pathway = 1
-  )
+    # Top 1 per pathway across split sankey (1 positive, 1 negative = 2 total across list)
+    widgets_top1 <- plot_interaction_sankey(
+        interactions,
+        disease = "DiseaseA",
+        direction = "both",
+        top_n_per_pathway = 1
+    )
 
-  total_links <- sum(vapply(widgets_top1, function(w) nrow(w$x$links), numeric(1)))
-  expect_equal(total_links, 4)
+    total_links <- sum(vapply(widgets_top1, function(w) nrow(w$x$links), numeric(1)))
+    expect_equal(total_links, 4)
 
-  # Top 1 for positive direction only
-  widget_top1_pos <- plot_interaction_sankey(
-    interactions,
-    disease = "DiseaseA",
-    direction = "positive",
-    top_n_per_pathway = 1
-  )
-  expect_s3_class(widget_top1_pos, "sankeyNetwork")
-  expect_equal(nrow(widget_top1_pos$x$links), 2)
+    # Top 1 for positive direction only
+    widget_top1_pos <- plot_interaction_sankey(
+        interactions,
+        disease = "DiseaseA",
+        direction = "positive",
+        top_n_per_pathway = 1
+    )
+    expect_s3_class(widget_top1_pos, "sankeyNetwork")
+    expect_equal(nrow(widget_top1_pos$x$links), 2)
 })
 
 test_that("plot_interaction_sankey renders networkD3 widget and handles missing node_directions", {
-  skip_if_not_installed("networkD3")
-  interactions <- make_mock_sankey_interactions()
+    skip_if_not_installed("networkD3")
+    interactions <- make_mock_sankey_interactions()
 
-  custom_colors <- c(up = "blue", down = "red", unchanged = "grey", stable = "grey")
-  widget <- plot_interaction_sankey(
-    interactions,
-    disease = "DiseaseA",
-    direction = "positive",
-    node_colors = custom_colors,
-    font_size = 14,
-    node_width = 40
-  )
+    custom_colors <- c(up = "blue", down = "red", unchanged = "grey", stable = "grey")
+    widget <- plot_interaction_sankey(
+        interactions,
+        disease = "DiseaseA",
+        direction = "positive",
+        node_colors = custom_colors,
+        font_size = 14,
+        node_width = 40
+    )
 
-  expect_s3_class(widget, "sankeyNetwork")
-  expect_equal(widget$x$options$fontSize, 14)
-  expect_equal(widget$x$options$nodeWidth, 40)
+    expect_s3_class(widget, "sankeyNetwork")
+    expect_equal(widget$x$options$fontSize, 14)
+    expect_equal(widget$x$options$nodeWidth, 40)
 
-  # Test fallback when node_directions is missing
-  interactions$DiseaseA$node_directions <- NULL
-  widget_fallback <- plot_interaction_sankey(interactions, disease = "DiseaseA", direction = "positive")
-  expect_true(all(widget_fallback$x$nodes$group == "stable"))
+    # Test fallback when node_directions is missing
+    interactions$DiseaseA$node_directions <- NULL
+    widget_fallback <- plot_interaction_sankey(interactions, disease = "DiseaseA", direction = "positive")
+    expect_true(all(widget_fallback$x$nodes$group == "stable"))
 })
 
 test_that("plot_interaction_sankey exports files and strips duplicate extension cleanly", {
-  skip_if_not_installed("networkD3")
-  skip_if_not_installed("htmlwidgets")
-  interactions <- make_mock_sankey_interactions()
+    skip_if_not_installed("networkD3")
+    skip_if_not_installed("htmlwidgets")
+    interactions <- make_mock_sankey_interactions()
 
-  temp_prefix <- tempfile("sankey_test_")
-  temp_with_ext <- paste0(temp_prefix, ".html")
+    temp_prefix <- tempfile("sankey_test_")
+    temp_with_ext <- paste0(temp_prefix, ".html")
 
-  # Test single-direction output export
-  res_pos <- suppressWarnings(
-    plot_interaction_sankey(
-      interactions,
-      disease = "DiseaseA",
-      direction = "positive",
-      save_path = temp_with_ext
+    # Test single-direction output export
+    res_pos <- suppressWarnings(
+        plot_interaction_sankey(
+            interactions,
+            disease = "DiseaseA",
+            direction = "positive",
+            save_path = temp_with_ext
+        )
     )
-  )
 
-  expect_s3_class(res_pos, "sankeyNetwork")
-  expect_true(file.exists(temp_with_ext))
-  expect_false(file.exists(paste0(temp_with_ext, ".html")))
-  if (file.exists(temp_with_ext)) unlink(temp_with_ext)
+    expect_s3_class(res_pos, "sankeyNetwork")
+    expect_true(file.exists(temp_with_ext))
+    expect_false(file.exists(paste0(temp_with_ext, ".html")))
+    if (file.exists(temp_with_ext)) unlink(temp_with_ext)
 
-  # Test split-direction output export (appends _positive / _negative suffixes)
-  res_both <- suppressWarnings(
-    plot_interaction_sankey(
-      interactions,
-      disease = "DiseaseA",
-      direction = "both",
-      save_path = temp_with_ext
+    # Test split-direction output export (appends _positive / _negative suffixes)
+    res_both <- suppressWarnings(
+        plot_interaction_sankey(
+            interactions,
+            disease = "DiseaseA",
+            direction = "both",
+            save_path = temp_with_ext
+        )
     )
-  )
 
-  pos_file <- paste0(temp_prefix, "_positive.html")
-  neg_file <- paste0(temp_prefix, "_negative.html")
+    pos_file <- paste0(temp_prefix, "_positive.html")
+    neg_file <- paste0(temp_prefix, "_negative.html")
 
-  expect_type(res_both, "list")
-  expect_true(file.exists(pos_file))
-  expect_true(file.exists(neg_file))
+    expect_type(res_both, "list")
+    expect_true(file.exists(pos_file))
+    expect_true(file.exists(neg_file))
 
-  # Cleanup
-  if (file.exists(pos_file)) unlink(pos_file)
-  if (file.exists(neg_file)) unlink(neg_file)
-  png_pos <- paste0(temp_prefix, "_positive.png")
-  png_neg <- paste0(temp_prefix, "_negative.png")
-  if (file.exists(png_pos)) unlink(png_pos)
-  if (file.exists(png_neg)) unlink(png_neg)
+    # Cleanup
+    if (file.exists(pos_file)) unlink(pos_file)
+    if (file.exists(neg_file)) unlink(neg_file)
+    png_pos <- paste0(temp_prefix, "_positive.png")
+    png_neg <- paste0(temp_prefix, "_negative.png")
+    if (file.exists(png_pos)) unlink(png_pos)
+    if (file.exists(png_neg)) unlink(png_neg)
 })
