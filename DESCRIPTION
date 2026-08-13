@@ -1,15 +1,16 @@
 Package: MiCARA
 Title: Microbiome Confounder-Adjusted Robust Analysis
-Version: 0.1.0
+Version: 0.99.0
 Authors@R: 
     person("Safa", "Bushnaq", , "19397747@brookes.ac.uk", role = c("aut", "cre"), comment=c(ORCID="0009-0000-3723-5725"))
-Description: MiCARA provides a robust dual-layer framework for
-    identifying disease-associated taxonomic and functional
-    interaction networks from heterogeneous microbiome cohorts
-    through compositional bias correction,
-    mixed-effects modelling,
-    confounder adjustment,
-    and network inference.
+Description: Provides a robust dual-layer framework for identifying and
+    visualizing disease-associated taxonomic and functional interaction
+    networks from heterogeneous microbiome cohorts. MiCARA combines
+    compositional data transformation, mixed-effects differential
+    abundance analysis, confounder adjustment, residual correlation
+    analysis, and multiple-testing correction to characterize
+    taxonomic-functional associations and represent them as Sankey
+    networks.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

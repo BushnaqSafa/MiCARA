@@ -16,25 +16,21 @@ validate_inputs(
 )
 }
 \arguments{
-\item{taxa}{Taxonomic abundance table. Features must be rows and samples
-columns. The first column may contain feature names.}
+\item{taxa}{Taxonomic abundance table. Must be a data.frame.}
 
-\item{pathways}{Functional pathway abundance table. Features must be rows
-and samples columns. The first column may contain feature names.}
+\item{pathways}{Functional pathway abundance table. Must be a data.frame.}
 
 \item{metadata}{Sample metadata. Must contain sample IDs and disease labels.}
 
-\item{disease_col}{Name of the disease column in metadata.}
+\item{disease_col}{Name of the disease column in metadata. Default "disease".}
 
-\item{disease_min_samples}{Minimum number of samples required to retain a
-disease group. Default is 10.}
+\item{disease_min_samples}{Minimum required samples per disease group. Default 10.}
 
-\item{metadata_missing_cutoff}{Maximum allowed fraction of missing values
-for an optional covariate. Default is 0.30.}
+\item{metadata_missing_cutoff}{Allowed missing value fraction for covariates. Default 0.30.}
 
-\item{normalise}{Logical indicating whether feature normalization should be performed. Default is TRUE.}
+\item{normalise}{Logical indicating whether feature normalization should be performed.}
 
-\item{verbose}{Logical; print a QC summary. Default TRUE.}
+\item{verbose}{Logical; print QC summary. Default TRUE.}
 }
 \value{
 An object of class \code{"micara_input"}.
@@ -44,35 +40,34 @@ Performs quality control on taxonomic and functional pathway abundance
 tables and accompanying sample metadata.
 }
 \examples{
-# Set up minimal synthetic inputs
 set.seed(123)
 sample_ids <- paste0("Sample_", 1:20)
 
-taxa_mat <- matrix(
-    runif(100, min = 0, max = 1000),
-    nrow = 5, ncol = 20,
-    dimnames = list(paste0("Taxon_", 1:5), sample_ids)
-)
+taxa_mat <- as.data.frame(matrix(
+  rpois(100, lambda = 50),
+  nrow = 5, ncol = 20,
+  dimnames = list(paste0("Taxon_", 1:5), sample_ids)
+))
 
-path_mat <- matrix(
-    runif(100, min = 0, max = 500),
-    nrow = 5, ncol = 20,
-    dimnames = list(paste0("Pathway_", 1:5), sample_ids)
-)
+path_mat <- as.data.frame(matrix(
+  rpois(100, lambda = 100),
+  nrow = 5, ncol = 20,
+  dimnames = list(paste0("Pathway_", 1:5), sample_ids)
+))
 
 meta_df <- data.frame(
-    sample = sample_ids,
-    disease = rep(c("Control", "Disease"), each = 10),
-    row.names = sample_ids
+  sample_id = sample_ids,
+  disease = rep(c("Control", "Disease"), each = 10),
+  age = rnorm(20, mean = 40, sd = 5),
+  row.names = sample_ids
 )
 
-# Validate inputs
-validated_data <- validate_inputs(
-    taxa = taxa_mat,
-    pathways = path_mat,
-    metadata = meta_df,
-    disease_col = "disease",
-    disease_min_samples = 5,
-    verbose = FALSE
+validated_obj <- validate_inputs(
+  taxa = taxa_mat,
+  pathways = path_mat,
+  metadata = meta_df,
+  disease_col = "disease",
+  disease_min_samples = 5,
+  verbose = FALSE
 )
 }

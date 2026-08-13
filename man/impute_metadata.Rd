@@ -70,45 +70,44 @@ if continuous \code{age} missingness exceeded 50\\%.
 set.seed(123)
 sample_ids <- paste0("Sample_", 1:20)
 
-taxa_mat <- matrix(
-    runif(100, min = 0, max = 1000),
-    nrow = 5, ncol = 20,
-    dimnames = list(paste0("Taxon_", 1:5), sample_ids)
-)
+taxa_mat <- as.data.frame(matrix(
+  rpois(100, lambda = 50),
+  nrow = 5, ncol = 20,
+  dimnames = list(paste0("Taxon_", 1:5), sample_ids)
+))
 
-path_mat <- matrix(
-    runif(100, min = 0, max = 500),
-    nrow = 5, ncol = 20,
-    dimnames = list(paste0("Pathway_", 1:5), sample_ids)
-)
+path_mat <- as.data.frame(matrix(
+  rpois(100, lambda = 100),
+  nrow = 5, ncol = 20,
+  dimnames = list(paste0("Pathway_", 1:5), sample_ids)
+))
 
 # Create metadata with missing age values (NA)
 meta_df <- data.frame(
-    sample = sample_ids,
-    disease = rep(c("Control", "Disease"), each = 10),
-    age = c(
-        25, NA, 30, 45, NA, 50, 33, 29, 41, 38,
-        52, 60, NA, 48, 55, 62, NA, 39, 44, 51
-    ),
-    row.names = sample_ids
+  sample_id = sample_ids,
+  disease = rep(c("Control", "Disease"), each = 10),
+  age = c(
+    25, NA, 30, 45, NA, 50, 33, 29, 41, 38,
+    52, 60, NA, 48, 55, 62, NA, 39, 44, 51
+  ),
+  row.names = sample_ids
 )
 
-# Build micara S3 object
 validated_obj <- validate_inputs(
-    taxa = taxa_mat,
-    pathways = path_mat,
-    metadata = meta_df,
-    disease_col = "disease",
-    disease_min_samples = 5,
-    verbose = FALSE
+  taxa = taxa_mat,
+  pathways = path_mat,
+  metadata = meta_df,
+  disease_col = "disease",
+  disease_min_samples = 5,
+  verbose = FALSE
 )
 
 # Run imputation on missing age column
 imputed_obj <- impute_metadata(
-    micara_obj = validated_obj,
-    impute_vars = "age",
-    m = 2,
-    seed = 123,
-    verbose = FALSE
+  micara_obj = validated_obj,
+  impute_vars = "age",
+  m = 2,
+  seed = 123,
+  verbose = FALSE
 )
 }

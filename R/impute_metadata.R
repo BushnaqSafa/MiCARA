@@ -47,46 +47,45 @@
 #' set.seed(123)
 #' sample_ids <- paste0("Sample_", 1:20)
 #'
-#' taxa_mat <- matrix(
-#'     runif(100, min = 0, max = 1000),
-#'     nrow = 5, ncol = 20,
-#'     dimnames = list(paste0("Taxon_", 1:5), sample_ids)
-#' )
+#' taxa_mat <- as.data.frame(matrix(
+#'   rpois(100, lambda = 50),
+#'   nrow = 5, ncol = 20,
+#'   dimnames = list(paste0("Taxon_", 1:5), sample_ids)
+#' ))
 #'
-#' path_mat <- matrix(
-#'     runif(100, min = 0, max = 500),
-#'     nrow = 5, ncol = 20,
-#'     dimnames = list(paste0("Pathway_", 1:5), sample_ids)
-#' )
+#' path_mat <- as.data.frame(matrix(
+#'   rpois(100, lambda = 100),
+#'   nrow = 5, ncol = 20,
+#'   dimnames = list(paste0("Pathway_", 1:5), sample_ids)
+#' ))
 #'
 #' # Create metadata with missing age values (NA)
 #' meta_df <- data.frame(
-#'     sample = sample_ids,
-#'     disease = rep(c("Control", "Disease"), each = 10),
-#'     age = c(
-#'         25, NA, 30, 45, NA, 50, 33, 29, 41, 38,
-#'         52, 60, NA, 48, 55, 62, NA, 39, 44, 51
-#'     ),
-#'     row.names = sample_ids
+#'   sample_id = sample_ids,
+#'   disease = rep(c("Control", "Disease"), each = 10),
+#'   age = c(
+#'     25, NA, 30, 45, NA, 50, 33, 29, 41, 38,
+#'     52, 60, NA, 48, 55, 62, NA, 39, 44, 51
+#'   ),
+#'   row.names = sample_ids
 #' )
 #'
-#' # Build micara S3 object
 #' validated_obj <- validate_inputs(
-#'     taxa = taxa_mat,
-#'     pathways = path_mat,
-#'     metadata = meta_df,
-#'     disease_col = "disease",
-#'     disease_min_samples = 5,
-#'     verbose = FALSE
+#'   taxa = taxa_mat,
+#'   pathways = path_mat,
+#'   metadata = meta_df,
+#'   disease_col = "disease",
+#'   disease_min_samples = 5,
+#'   verbose = FALSE
 #' )
 #'
 #' # Run imputation on missing age column
 #' imputed_obj <- impute_metadata(
-#'     micara_obj = validated_obj,
-#'     impute_vars = "age",
-#'     m = 2,
-#'     seed = 123,
-#'     verbose = FALSE
+#'   micara_obj = validated_obj,
+#'   impute_vars = "age",
+#'   m = 2,
+#'   seed = 123,
+#'   verbose = FALSE
 #' )
 impute_metadata <- function(
   micara_obj,
@@ -98,213 +97,213 @@ impute_metadata <- function(
   imputation_index = 1,
   verbose = TRUE
 ) {
-    # simple class check
-    if (!inherits(micara_obj, "micara_input")) {
-        stop(
-            "'micara_obj' must be the output of validate_inputs() ",
-            "(an object of class 'micara_input')."
-        )
+  # simple class check
+  if (!inherits(micara_obj, "micara_input")) {
+    stop(
+      "'micara_obj' must be the output of validate_inputs() ",
+      "(an object of class 'micara_input')."
+    )
+  }
+
+  metadata <- micara_obj$metadata
+
+  ## ------------------------------------------------------------------
+  ## 1. Determine which variables to impute
+  ##
+  ## Only true host confounders are ever imputation targets.
+  ## age_category is deliberately excluded here - it is expected to be
+  ## complete and instead serves as a stable auxiliary predictor for
+  ## imputing continuous age (see step 2).
+  ## ------------------------------------------------------------------
+
+  host_confounders <- c("age", "gender", "BMI")
+
+  if (is.null(impute_vars)) {
+    # Auto-detect intersection of host confounders and retained covariates
+    impute_vars <- intersect(host_confounders, micara_obj$confounders)
+    # Retain only those that actually contain missing values
+    impute_vars <- impute_vars[vapply(impute_vars, function(v) any(is.na(metadata[[v]])), logical(1))]
+  } else {
+    unavailable <- setdiff(impute_vars, names(metadata))
+    if (length(unavailable) > 0) {
+      stop("impute_vars not found in metadata: ", paste(unavailable, collapse = ", "))
     }
-
-    metadata <- micara_obj$metadata
-
-    ## ------------------------------------------------------------------
-    ## 1. Determine which variables to impute
-    ##
-    ## Only true host confounders are ever imputation targets.
-    ## age_category is deliberately excluded here - it is expected to be
-    ## complete and instead serves as a stable auxiliary predictor for
-    ## imputing continuous age (see step 2).
-    ## ------------------------------------------------------------------
-
-    host_confounders <- c("age", "gender", "BMI")
-
-    if (is.null(impute_vars)) {
-        # Auto-detect intersection of host confounders and retained covariates
-        impute_vars <- intersect(host_confounders, micara_obj$confounders)
-        # Retain only those that actually contain missing values
-        impute_vars <- impute_vars[vapply(impute_vars, function(v) any(is.na(metadata[[v]])), logical(1))]
-    } else {
-        unavailable <- setdiff(impute_vars, names(metadata))
-        if (length(unavailable) > 0) {
-            stop("impute_vars not found in metadata: ", paste(unavailable, collapse = ", "))
-        }
-        if ("age_category" %in% impute_vars) {
-            stop(
-                "'age_category' should not be used as an imputation target -it is ",
-                "expected to be complete and is used as an auxiliary predictor ",
-                "instead. Pass it via 'auxiliary_predictors' if you need to include it."
-            )
-        }
+    if ("age_category" %in% impute_vars) {
+      stop(
+        "'age_category' should not be used as an imputation target -it is ",
+        "expected to be complete and is used as an auxiliary predictor ",
+        "instead. Pass it via 'auxiliary_predictors' if you need to include it."
+      )
     }
-    # Early exit if no variables need imputation
-    if (length(impute_vars) == 0) {
-        if (verbose) {
-            message(
-                "[Info] No eligible host confounders with missing values to impute. ",
-                "Returning input object unchanged."
-            )
-        }
-        micara_obj$imputation_performed <- FALSE
-        micara_obj$mice_fit <- NULL
-        micara_obj$imputed_vars <- character(0)
-        class(micara_obj) <- c("micara_imputed", class(micara_obj))
-        return(micara_obj)
-    }
-
-    ## ------------------------------------------------------------------
-    ## 2. Determine auxiliary predictors (inform imputation, never imputed)
-    ## ------------------------------------------------------------------
-
-    if (is.null(auxiliary_predictors)) {
-        auxiliary_predictors <- intersect(
-            c("study_name", "age_category", "disease"),
-            names(metadata)
-        )
-    }
-
-    if (any(is.na(metadata[["disease"]]))) {
-        stop("'disease' contains missing values; every sample must have a disease label.")
-    }
-
-    if ("study_name" %in% auxiliary_predictors && any(is.na(metadata[["study_name"]]))) {
-        stop(
-            "'study_name' contains missing values. Study/cohort identity should ",
-            "never be imputed; either supply it for all samples or remove ",
-            "'study_name' from auxiliary_predictors."
-        )
-    }
-
-    ## age_category is never an imputation target, but it is also not
-    ## required to be complete. If it is missing entirely from the
-    ## metadata, it is simply absent from auxiliary_predictors already
-    ## (see the intersect() above). If it IS present but contains missing
-    ## values, we do not block imputation of the actual host confounders
-    ## on account of it - we drop it from the predictor set for this run
-    ## and proceed using the remaining complete predictors instead.
-    if ("age_category" %in% auxiliary_predictors && any(is.na(metadata[["age_category"]]))) {
-        if (verbose) {
-            message(
-                "'age_category' contains missing values and will be excluded as an ",
-                "auxiliary predictor for this run (it is never an imputation ",
-                "target itself). Imputation of ", paste(impute_vars, collapse = ", "),
-                " will proceed using the remaining predictor(s): ",
-                paste(setdiff(auxiliary_predictors, "age_category"), collapse = ", "), "."
-            )
-        }
-        auxiliary_predictors <- setdiff(auxiliary_predictors, "age_category")
-    }
-
-    ## ------------------------------------------------------------------
-    ## 3. Skip if nothing actually needs imputing
-    ## ------------------------------------------------------------------
-
-    n_missing <- sum(vapply(metadata[impute_vars], function(x) sum(is.na(x)), integer(1)))
-
-    if (n_missing == 0) {
-        if (verbose) {
-            message(
-                "No missing values detected in ", paste(impute_vars, collapse = ", "),
-                "; imputation skipped."
-            )
-        }
-        micara_obj$imputation_performed <- FALSE
-        micara_obj$mice_fit <- NULL
-        micara_obj$imputed_vars <- impute_vars
-        class(micara_obj) <- c("micara_imputed", class(micara_obj))
-        return(micara_obj)
-    }
-
-    ## ------------------------------------------------------------------
-    ## 4. Build the MICE input frame
-    ## ------------------------------------------------------------------
-
-    if (!requireNamespace("mice", quietly = TRUE)) {
-        stop("Package 'mice' is required for impute_metadata() but is not installed.")
-    }
-
-    mice_vars <- unique(c(impute_vars, auxiliary_predictors))
-    mice_df <- metadata[, mice_vars, drop = FALSE]
-
-    ## coerce character columns to factors so mice treats them categorically
-    mice_df[] <- lapply(mice_df, function(col) {
-        if (is.character(col)) factor(col) else col
-    })
-
-    ## ------------------------------------------------------------------
-    ## 5. Run MICE
-    ## ------------------------------------------------------------------
-
+  }
+  # Early exit if no variables need imputation
+  if (length(impute_vars) == 0) {
     if (verbose) {
-        message("\n[MiCARA] Running MICE imputation for: ", paste(impute_vars, collapse = ", "))
+      message(
+        "[Info] No eligible host confounders with missing values to impute. ",
+        "Returning input object unchanged."
+      )
     }
-
-    suppressWarnings({
-        mice_fit <- mice::mice(
-            mice_df,
-            m         = m,
-            method    = method,
-            seed      = seed,
-            printFlag = FALSE
-        )
-    })
-
-    imputed_df <- mice::complete(mice_fit, imputation_index)
-
-    ## ------------------------------------------------------------------
-    ## 6. Merge imputed values back into full metadata
-    ## ------------------------------------------------------------------
-
-    for (v in impute_vars) {
-        if (is.character(metadata[[v]])) {
-            metadata[[v]] <- as.character(imputed_df[[v]])
-        } else {
-            metadata[[v]] <- imputed_df[[v]]
-        }
-    }
-
-    metadata[impute_vars] <- imputed_df[impute_vars]
-
-    micara_obj$metadata <- metadata
-    micara_obj$mice_fit <- mice_fit
-    micara_obj$imputed_vars <- impute_vars
-    micara_obj$imputation_performed <- TRUE
-
+    micara_obj$imputation_performed <- FALSE
+    micara_obj$mice_fit <- NULL
+    micara_obj$imputed_vars <- character(0)
     class(micara_obj) <- c("micara_imputed", class(micara_obj))
-
-    ## ------------------------------------------------------------------
-    ## 7. Report
-    ## ------------------------------------------------------------------
-
-    if (verbose) {
-        n_logged <- if (!is.null(mice_fit$loggedEvents)) nrow(mice_fit$loggedEvents) else 0
-
-        imp_summary <- vapply(impute_vars, function(v) {
-            n_imp <- mice_fit$nmis[[v]]
-            pct_imp <- (n_imp / nrow(metadata)) * 100
-            sprintf("  • %-12s : %d / %d samples imputed (%.1f%%)", v, n_imp, nrow(metadata), pct_imp)
-        }, FUN.VALUE = character(1))
-
-        logged_text <- if (n_logged > 0) " (see micara_obj$mice_fit$loggedEvents)" else ""
-
-        report <- c(
-            "\n========== MiCARA Imputation Report ==========",
-            "Imputation Breakdown:",
-            imp_summary,
-            "------------------------------------------------",
-            paste0("Auxiliary predictors:   ", paste(auxiliary_predictors, collapse = ", ")),
-            paste0("Imputations (m):        ", m),
-            paste0("Dataset used:           #", imputation_index, " of ", m),
-            paste0("Logged events:          ", n_logged, logged_text),
-            "[MiCARA Tip] Downstream Covariate Selection:",
-            "  Imputed continuous 'age' is recommended for linear modeling (ANCOM-BC2)",
-            "   rather than 'age_category' to preserve degrees of freedom.",
-            "  Use 'age_category' instead if modeling non-linear life-stage thresholds",
-            "    (e.g., pediatric vs. adult) or if continuous 'age' missingness was high.",
-            "------------------------------------------------"
-        )
-
-        message(paste(report, collapse = "\n"))
-    }
     return(micara_obj)
+  }
+
+  ## ------------------------------------------------------------------
+  ## 2. Determine auxiliary predictors (inform imputation, never imputed)
+  ## ------------------------------------------------------------------
+
+  if (is.null(auxiliary_predictors)) {
+    auxiliary_predictors <- intersect(
+      c("study_name", "age_category", "disease"),
+      names(metadata)
+    )
+  }
+
+  if (any(is.na(metadata[["disease"]]))) {
+    stop("'disease' contains missing values; every sample must have a disease label.")
+  }
+
+  if ("study_name" %in% auxiliary_predictors && any(is.na(metadata[["study_name"]]))) {
+    stop(
+      "'study_name' contains missing values. Study/cohort identity should ",
+      "never be imputed; either supply it for all samples or remove ",
+      "'study_name' from auxiliary_predictors."
+    )
+  }
+
+  ## age_category is never an imputation target, but it is also not
+  ## required to be complete. If it is missing entirely from the
+  ## metadata, it is simply absent from auxiliary_predictors already
+  ## (see the intersect() above). If it IS present but contains missing
+  ## values, we do not block imputation of the actual host confounders
+  ## on account of it - we drop it from the predictor set for this run
+  ## and proceed using the remaining complete predictors instead.
+  if ("age_category" %in% auxiliary_predictors && any(is.na(metadata[["age_category"]]))) {
+    if (verbose) {
+      message(
+        "'age_category' contains missing values and will be excluded as an ",
+        "auxiliary predictor for this run (it is never an imputation ",
+        "target itself). Imputation of ", paste(impute_vars, collapse = ", "),
+        " will proceed using the remaining predictor(s): ",
+        paste(setdiff(auxiliary_predictors, "age_category"), collapse = ", "), "."
+      )
+    }
+    auxiliary_predictors <- setdiff(auxiliary_predictors, "age_category")
+  }
+
+  ## ------------------------------------------------------------------
+  ## 3. Skip if nothing actually needs imputing
+  ## ------------------------------------------------------------------
+
+  n_missing <- sum(vapply(metadata[impute_vars], function(x) sum(is.na(x)), integer(1)))
+
+  if (n_missing == 0) {
+    if (verbose) {
+      message(
+        "No missing values detected in ", paste(impute_vars, collapse = ", "),
+        "; imputation skipped."
+      )
+    }
+    micara_obj$imputation_performed <- FALSE
+    micara_obj$mice_fit <- NULL
+    micara_obj$imputed_vars <- impute_vars
+    class(micara_obj) <- c("micara_imputed", class(micara_obj))
+    return(micara_obj)
+  }
+
+  ## ------------------------------------------------------------------
+  ## 4. Build the MICE input frame
+  ## ------------------------------------------------------------------
+
+  if (!requireNamespace("mice", quietly = TRUE)) {
+    stop("Package 'mice' is required for impute_metadata() but is not installed.")
+  }
+
+  mice_vars <- unique(c(impute_vars, auxiliary_predictors))
+  mice_df <- metadata[, mice_vars, drop = FALSE]
+
+  ## coerce character columns to factors so mice treats them categorically
+  mice_df[] <- lapply(mice_df, function(col) {
+    if (is.character(col)) factor(col) else col
+  })
+
+  ## ------------------------------------------------------------------
+  ## 5. Run MICE
+  ## ------------------------------------------------------------------
+
+  if (verbose) {
+    message("\n[MiCARA] Running MICE imputation for: ", paste(impute_vars, collapse = ", "))
+  }
+
+  suppressWarnings({
+    mice_fit <- mice::mice(
+      mice_df,
+      m         = m,
+      method    = method,
+      seed      = seed,
+      printFlag = FALSE
+    )
+  })
+
+  imputed_df <- mice::complete(mice_fit, imputation_index)
+
+  ## ------------------------------------------------------------------
+  ## 6. Merge imputed values back into full metadata
+  ## ------------------------------------------------------------------
+
+  for (v in impute_vars) {
+    if (is.character(metadata[[v]])) {
+      metadata[[v]] <- as.character(imputed_df[[v]])
+    } else {
+      metadata[[v]] <- imputed_df[[v]]
+    }
+  }
+
+  metadata[impute_vars] <- imputed_df[impute_vars]
+
+  micara_obj$metadata <- metadata
+  micara_obj$mice_fit <- mice_fit
+  micara_obj$imputed_vars <- impute_vars
+  micara_obj$imputation_performed <- TRUE
+
+  class(micara_obj) <- c("micara_imputed", class(micara_obj))
+
+  ## ------------------------------------------------------------------
+  ## 7. Report
+  ## ------------------------------------------------------------------
+
+  if (verbose) {
+    n_logged <- if (!is.null(mice_fit$loggedEvents)) nrow(mice_fit$loggedEvents) else 0
+
+    imp_summary <- vapply(impute_vars, function(v) {
+      n_imp <- mice_fit$nmis[[v]]
+      pct_imp <- (n_imp / nrow(metadata)) * 100
+      sprintf("  %-12s : %d / %d samples imputed (%.1f%%)", v, n_imp, nrow(metadata), pct_imp)
+    }, FUN.VALUE = character(1))
+
+    logged_text <- if (n_logged > 0) " (see micara_obj$mice_fit$loggedEvents)" else ""
+
+    report <- c(
+      "\n========== MiCARA Imputation Report ==========",
+      "Imputation Breakdown:",
+      imp_summary,
+      "------------------------------------------------",
+      paste0("Auxiliary predictors:   ", paste(auxiliary_predictors, collapse = ", ")),
+      paste0("Imputations (m):        ", m),
+      paste0("Dataset used:           #", imputation_index, " of ", m),
+      paste0("Logged events:          ", n_logged, logged_text),
+      "[MiCARA Tip] Downstream Covariate Selection:",
+      "  Imputed continuous 'age' is recommended for linear modeling (ANCOM-BC2)",
+      "   rather than 'age_category' to preserve degrees of freedom.",
+      "  Use 'age_category' instead if modeling non-linear life-stage thresholds",
+      "    (e.g., pediatric vs. adult) or if continuous 'age' missingness was high.",
+      "------------------------------------------------"
+    )
+
+    message(paste(report, collapse = "\n"))
+  }
+  return(micara_obj)
 }

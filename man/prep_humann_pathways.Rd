@@ -17,12 +17,12 @@ Clean HUMAnN Pathway Matrix
 }
 \examples{
 dummy_pathways <- matrix(
-    c(150.2, 300.8, 0, 120.0, 450.5, 10.0),
-    nrow = 3, ncol = 2,
-    dimnames = list(
-        c("PWY-101: gnb1", "UNMAPPED", "PWY-101|s__Staphylococcus_aureus"),
-        c("Sample1", "Sample2")
-    )
+  c(150.2, 300.8, 0, 120.0, 450.5, 10.0),
+  nrow = 3, ncol = 2,
+  dimnames = list(
+    c("PWY-101: gnb1", "UNMAPPED", "PWY-101|s__Staphylococcus_aureus"),
+    c("Sample1", "Sample2")
+  )
 )
 prep_humann_pathways(dummy_pathways)
 }

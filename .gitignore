@@ -1,11 +1,14 @@
-inst/doc
-.Rhistory
-.RData
-.DS_Store
-.Rproj.user
-.httr-oauth
-.quarto
-*.html
+# Build directory and rendered vignettes (keep Git repo clean)
+inst/doc/
+docs/
+/doc/
+/Meta/
 *.html
 
-docs/
+# R history and session files
+.Rhistory
+.RData
+.Rproj.user/
+.httr-oauth
+.DS_Store
+.quarto/

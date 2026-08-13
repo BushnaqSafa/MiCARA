@@ -118,40 +118,53 @@ should be cleaned only in downstream plotting functions.
 set.seed(123)
 sample_ids <- paste0("Sample_", 1:20)
 
-taxa_mat <- matrix(
-    rpois(100, lambda = 50),
-    nrow = 5, ncol = 20,
-    dimnames = list(paste0("Taxon_", 1:5), sample_ids)
-)
+taxa_mat <- as.data.frame(matrix(
+  rpois(100, lambda = 50),
+  nrow = 5, ncol = 20,
+  dimnames = list(paste0("Taxon_", 1:5), sample_ids)
+))
 
-path_mat <- matrix(
-    rpois(100, lambda = 100),
-    nrow = 5, ncol = 20,
-    dimnames = list(paste0("Pathway_", 1:5), sample_ids)
-)
+path_mat <- as.data.frame(matrix(
+  rpois(100, lambda = 100),
+  nrow = 5, ncol = 20,
+  dimnames = list(paste0("Pathway_", 1:5), sample_ids)
+))
+
+# Inject strong signal so features pass significance testing
+taxa_mat["Taxon_1", 11:20] <- taxa_mat["Taxon_1", 11:20] + 300
+path_mat["Pathway_1", 11:20] <- path_mat["Pathway_1", 11:20] + 500
 
 meta_df <- data.frame(
-    sample = sample_ids,
-    disease = rep(c("Control", "Disease"), each = 10),
-    age = rnorm(20, mean = 40, sd = 5),
-    row.names = sample_ids
+  sample_id = sample_ids,
+  disease = rep(c("Control", "Disease"), each = 10),
+  age = rnorm(20, mean = 40, sd = 5),
+  row.names = sample_ids
 )
 
 validated_obj <- validate_inputs(
-    taxa = taxa_mat,
-    pathways = path_mat,
-    metadata = meta_df,
-    disease_col = "disease",
-    disease_min_samples = 5,
-    verbose = FALSE
+  taxa = taxa_mat,
+  pathways = path_mat,
+  metadata = meta_df,
+  disease_col = "disease",
+  disease_min_samples = 5,
+  verbose = FALSE
 )
 
-# Compute residual CLR correlations adjusting for covariates
+diff_res <- run_diff_abundance(
+  micara_obj = validated_obj,
+  feature_type = c("taxa", "pathways"),
+  rand_effect = NULL,
+  n_cores = 1,
+  verbose = FALSE
+)
+
 corr_res <- compute_residualCLR_correlations(
-    micara_obj = validated_obj,
-    covariates = "age",
-    min_samples_per_disease = 5L,
-    verbose = FALSE
+  micara_obj = validated_obj,
+  diffab_obj = diff_res,
+  covariates = "age",
+  q_cutoff = 1.0,
+  min_samples_per_disease = 5L,
+  verbose = FALSE
 )
 
 }
