@@ -102,6 +102,17 @@ validate_inputs <- function(
   normalise = TRUE,
   verbose = TRUE
 ) {
+  
+  # Auto-convert matrices to data.frames for flexibility
+  if (is.matrix(taxa)) {
+    taxa <- as.data.frame(taxa)
+  }
+  if (is.matrix(pathways)) {
+    pathways <- as.data.frame(pathways)
+  }
+  if (is.matrix(metadata)) {
+    metadata <- as.data.frame(metadata)
+  }
   ## ================================================================
   ## 1. Strict Input Type Enforcement
   ## ================================================================

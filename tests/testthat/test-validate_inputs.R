@@ -148,26 +148,29 @@ test_that("proportion-scale input is reconstructed to estimated counts when read
 ## 2. Object type check
 ## ------------------------------------------------------------------------
 
-test_that("non-data.frame inputs are rejected", {
+test_that("matrix inputs are accepted and converted", {
   d <- make_test_data()
-
-  expect_error(
-    validate_inputs(as.matrix(d$taxa), d$pathways, d$metadata, verbose = FALSE),
-    "must be a data.frame"
+  
+  expect_no_error(
+    validate_inputs(as.matrix(d$taxa), d$pathways, d$metadata, verbose = FALSE)
   )
-
-  expect_error(
-    validate_inputs(d$taxa, as.matrix(d$pathways), d$metadata, verbose = FALSE),
-    "must be a data.frame"
+  
+  expect_no_error(
+    validate_inputs(d$taxa, as.matrix(d$pathways), d$metadata, verbose = FALSE)
   )
-
-  expect_error(
-    validate_inputs(d$taxa, d$pathways, as.matrix(d$metadata), verbose = FALSE),
-    "must be a data.frame"
+  
+  expect_no_error(
+    validate_inputs(d$taxa, d$pathways, as.matrix(d$metadata), verbose = FALSE)
   )
 })
 
-
+test_that("truly invalid non-data.frame inputs are rejected", {
+  d <- make_test_data()
+  
+  expect_error(
+    validate_inputs("invalid_input", d$pathways, d$metadata, verbose = FALSE)
+  )
+})
 ## ------------------------------------------------------------------------
 ## 3. Non-numeric content
 ## ------------------------------------------------------------------------
