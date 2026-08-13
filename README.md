@@ -32,16 +32,16 @@ MiCARA follows a streamlined 5-step pipeline:
 
 ## Installation
 
-You can install the development version of MiCARA from GitHub with:
+You can install `MiCARA` directly from GitHub using `pak`:
 
 ``` r
-# Install devtools if not already installed
-if (!requireNamespace("devtools", quietly = TRUE)) {
-    install.packages("devtools")
+# Install pak if not already available
+if (!requireNamespace("pak", quietly = TRUE)) {
+  install.packages("pak")
 }
 
-# Install MiCARA from GitHub
-devtools::install_github("BushnaqSafa/MiCARA")
+# Install MiCARA
+pak::pak("BushnaqSafa/MiCARA")
 ```
 
 ### Quickstart Example
@@ -51,9 +51,9 @@ library(MiCARA)
 
 # 1. Validate & filter inputs
 obj <- validate_inputs(
-  taxa_mat = taxa_mat, 
-  pathway_mat = pathway_mat, 
-  metadata = metadata, 
+  taxa_mat = taxa_mat,
+  pathway_mat = pathway_mat,
+  metadata = metadata,
   disease_col = "disease"
 )
 
