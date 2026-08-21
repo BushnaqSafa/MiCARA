@@ -134,19 +134,19 @@
 #' )
 #'
 compute_residualCLR_correlations <- function(
-  micara_obj,
-  diffab_obj = NULL,
-  taxa_diffab = NULL,
-  pathway_diffab = NULL,
-  diseases = NULL,
-  covariates = NULL,
-  q_cutoff = 0.05,
-  r_cutoff = 0.2,
-  pseudocount = NULL,
-  min_samples_per_disease = 10L,
-  min_residual_df = 3L,
-  retain_all_pairs = TRUE,
-  verbose = TRUE
+      micara_obj,
+      diffab_obj = NULL,
+      taxa_diffab = NULL,
+      pathway_diffab = NULL,
+      diseases = NULL,
+      covariates = NULL,
+      q_cutoff = 0.05,
+      r_cutoff = 0.2,
+      pseudocount = NULL,
+      min_samples_per_disease = 10L,
+      min_residual_df = 3L,
+      retain_all_pairs = TRUE,
+      verbose = TRUE
 ) {
     ## ------------------------------------------------------------------
     ## 1. Validate inputs and resolve differential-abundance objects
@@ -419,7 +419,20 @@ compute_residualCLR_correlations <- function(
 
     if (verbose) {
         message("\n========== MiCARA Residual Correlation Summary ==========")
-        message(summary_table, row.names = FALSE)
+        for (i in seq_len(nrow(summary_table))) {
+            d_status <- summary_table$status[i]
+
+            message("Cohort: ", summary_table$disease[i], " (Status: ", d_status, ")")
+
+            if (identical(d_status, "analysed")) {
+                message("  - Samples: ", summary_table$n_samples[i], " | Residual DF: ", summary_table$residual_df[i])
+                message("  - Features Tested: ", summary_table$n_taxa_tested[i], " taxa x ", summary_table$n_pathways_tested[i], " pathways (", summary_table$n_pairs_tested[i], " pairs)")
+                message("  - Retained Links: ", summary_table$n_significant_links[i], " (", summary_table$n_positive_links[i], " pos, ", summary_table$n_negative_links[i], " neg)")
+                message("  - Covariates Used: ", summary_table$covariates_used[i])
+            } else {
+                message("  - Reason Skipped: ", summary_table$reason[i])
+            }
+        }
         message("----------------------------------------------------------")
     }
 

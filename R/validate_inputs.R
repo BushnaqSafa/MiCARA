@@ -26,8 +26,7 @@ clean_shotgun_input <- function(df) {
             col_vals <- as.character(df[[1]])
         }
         # Filter out stratified pathways if raw HUMAnN
-        is_stratified <- grepl("\\|", col_vals) &
-            grepl("PWY|PATHWAY|UNMAPPED", col_vals, ignore.case = TRUE)
+        is_stratified <- grepl("\\|(g__|s__|unclassified)", col_vals, ignore.case = TRUE)
 
         if (any(is_stratified)) {
             df <- df[!is_stratified, , drop = FALSE]
@@ -109,17 +108,24 @@ validate_inputs <- function(
     metadata <- tryCatch(as.data.frame(metadata), error = function(e) metadata)
 
     ## ================================================================
-    ## 1. Strict Input Type Enforcement
+    ## 1. Input Type Coercion & Enforcement
     ## ================================================================
-    if (!is.data.frame(taxa)) {
-        stop("'taxa' must be a data.frame.", call. = FALSE)
+    .to_df <- function(df, name) {
+        if (inherits(df, "DFrame") || is(df, "DataFrame") || is.matrix(df)) {
+            return(as.data.frame(df))
+        }
+        if (is.matrix(df)) {
+            return(as.data.frame(df))
+        }
+        if (is.data.frame(df)) {
+            return(as.data.frame(df)) # Handles base data.frame, tibble, data.table
+        }
+        stop(sprintf("'%s' must be a data.frame, matrix, or Bioconductor DFrame.", name), call. = FALSE)
     }
-    if (!is.data.frame(pathways)) {
-        stop("'pathways' must be a data.frame.", call. = FALSE)
-    }
-    if (!is.data.frame(metadata)) {
-        stop("'metadata' must be a data.frame.", call. = FALSE)
-    }
+
+    taxa <- .to_df(taxa, "taxa")
+    pathways <- .to_df(pathways, "pathways")
+    metadata <- .to_df(metadata, "metadata")
 
     # Step 0: Preprocess MetaPhlAn/HUMAnN formats non-destructively
     taxa <- clean_shotgun_input(taxa)
@@ -172,8 +178,8 @@ validate_inputs <- function(
             col <- col_char
         }
         if (is.character(col)) {
-            num_converted <- suppressWarnings(as.numeric(col))
-            if (sum(!is.na(col)) > 0 && sum(!is.na(num_converted)) == sum(!is.na(col))) {
+            num_converted <- utils::type.convert(col, as.is = TRUE)
+            if (is.numeric(num_converted)) {
                 return(num_converted)
             }
         }

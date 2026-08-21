@@ -2,40 +2,43 @@ Package: MiCARA
 Title: Microbiome Confounder-Adjusted Robust Analysis
 Version: 0.99.0
 Authors@R: 
-    person("Safa", "Bushnaq", , "19397747@brookes.ac.uk", role = c("aut", "cre"), comment=c(ORCID="0009-0000-3723-5725"))
-Description: Provides a robust dual-layer framework for identifying and
-    visualizing disease-associated taxonomic and functional interaction
-    networks from heterogeneous microbiome cohorts. MiCARA combines
-    compositional data transformation, mixed-effects differential
-    abundance analysis, confounder adjustment, residual correlation
-    analysis, and multiple-testing correction to characterize
-    taxonomic-functional associations and represent them as Sankey
+    person("Safa", "Bushnaq", , "19397747@brookes.ac.uk", role = c("aut", "cre"),
+           comment = c(ORCID = "0009-0000-3723-5725"))
+Description: Provides a comprehensive framework for multi-cohort
+    microbiome differential abundance and residual correlation analysis.
+    It integrates confounder-adjusted linear models with centered
+    log-ratio transformed taxonomic and functional pathway profiles.  The
+    package features robust preprocessing, automated covariate handling,
+    multiple-testing correction, and quality control diagnostics for
+    multi-omics data.  Interactive visualization tools are included to
+    facilitate downstream interpretation of cross-domain interaction
     networks.
 License: MIT + file LICENSE
-Encoding: UTF-8
-Roxygen: list(markdown = TRUE)
+URL: https://github.com/BushnaqSafa/MiCARA
+BugReports: https://github.com/BushnaqSafa/MiCARA/issues
+Depends: 
+    R (>= 4.5.0)
+Imports: 
+    ANCOMBC,
+    Hmisc,
+    htmlwidgets,
+    mice,
+    networkD3,
+    phyloseq,
+    stats,
+    utils
 Suggests: 
     knitr,
+    microbiome,
     rmarkdown,
     testthat (>= 3.0.0),
     webshot,
-    webshot2,
-    microbiome
-Config/testthat/edition: 3
-VignetteBuilder: knitr
-Imports: 
-    mice,
-    phyloseq,
-    ANCOMBC,
-    Hmisc,
-    networkD3,
-    htmlwidgets,
-    stats,
-    utils
-biocViews:
-    Microbiome, DifferentialExpression, Software, Metagenomics, NetworkInference, Pathways, Network
-Depends: 
-    R (>= 4.5.0)
-URL: https://github.com/BushnaqSafa/MiCARA
-BugReports: https://github.com/BushnaqSafa/MiCARA/issues
+    webshot2
+VignetteBuilder: 
+    knitr
+biocViews:Microbiome, DifferentialExpression, Software, Metagenomics,
+    NetworkInference, Pathways, Network, Preprocessing, QualityControl
 Config/roxygen2/version: 8.1.0
+Config/testthat/edition: 3
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)

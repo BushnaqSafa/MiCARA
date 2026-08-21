@@ -88,14 +88,14 @@
 #'     verbose = FALSE
 #' )
 impute_metadata <- function(
-  micara_obj,
-  impute_vars = NULL,
-  auxiliary_predictors = NULL,
-  m = 5,
-  method = NULL, # (allowing default algorithm selection per data type: pmm (Predictive Mean Matching) for continuous, logreg (Logistic Regression) for binary factors, polyreg (polytomous logistic regression) for unordered factors) or a named vector.
-  seed = 123,
-  imputation_index = 1,
-  verbose = TRUE
+      micara_obj,
+      impute_vars = NULL,
+      auxiliary_predictors = NULL,
+      m = 5,
+      method = NULL, # (allowing default algorithm selection per data type: pmm (Predictive Mean Matching) for continuous, logreg (Logistic Regression) for binary factors, polyreg (polytomous logistic regression) for unordered factors) or a named vector.
+      seed = 123,
+      imputation_index = 1,
+      verbose = TRUE
 ) {
     # simple class check
     if (!inherits(micara_obj, "micara_input")) {
@@ -238,15 +238,22 @@ impute_metadata <- function(
         message("\n[MiCARA] Running MICE imputation for: ", paste(impute_vars, collapse = ", "))
     }
 
-    suppressWarnings({
-        mice_fit <- mice::mice(
+
+    mice_fit <- withCallingHandlers(
+        mice::mice(
             mice_df,
             m         = m,
             method    = method,
             seed      = seed,
             printFlag = FALSE
-        )
-    })
+        ),
+        warning = function(w) {
+            # Mute non-fatal logged event / collinearity warnings from mice
+            if (grepl("loggedEvents|collinear", w$message, ignore.case = TRUE)) {
+                invokeRestart("muffleWarning")
+            }
+        }
+    )
 
     imputed_df <- mice::complete(mice_fit, imputation_index)
 
