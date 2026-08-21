@@ -1,6 +1,6 @@
 Package: MiCARA
 Title: Microbiome Confounder-Adjusted Robust Analysis
-Version: 0.99.0
+Version: 0.99.1
 Authors@R: 
     person("Safa", "Bushnaq", , "19397747@brookes.ac.uk", role = c("aut", "cre"),
            comment = c(ORCID = "0009-0000-3723-5725"))
